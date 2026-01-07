@@ -64,29 +64,48 @@ else:
 
 st.markdown("---")
 
-# 板块二：支数分析 (替换热度矩阵)
+# --- 板块二：规格支数分析 (修复 ValueError 版本) ---
 st.header("2️⃣ 规格支数：哪些规格在增长？")
-st.write("左图看绝对销量波动，右图看各规格的市场占比份额（是否由于大规格取代了小规格）。")
+st.info("💡 系统已自动为您筛选销量前 10 的核心规格进行分析，避免由于规格过多导致图表混乱。")
 
-# 准备数据
-spec_data = filtered_df.groupby(['时间轴', '支数'])['销量'].sum().reset_index()
+# 1. 聚合数据
+spec_total = filtered_df.groupby('支数')['销量'].sum().sort_values(ascending=False).reset_index()
+
+# 2. 筛选出销量前 10 的规格名
+top_10_specs = spec_total.head(10)['支数'].tolist()
+
+# 3. 过滤原始数据，仅保留这前 10 名
+spec_data = filtered_df[filtered_df['支数'].isin(top_10_specs)].groupby(['时间轴', '支数'])['销量'].sum().reset_index()
 
 col3, col4 = st.columns(2)
 
 with col3:
-    # 使用分面折线图，把不同支数分开，避免线条交织
-    fig_spec_line = px.line(spec_data, x='时间轴', y='销量', color='支数', 
-                            facet_col='支数', facet_col_wrap=2, # 每行显示两个小图
-                            title="各规格销量独立趋势 (分图查看)")
+    # 限制每行显示 3 个图，并减少垂直间距
+    fig_spec_line = px.line(
+        spec_data, 
+        x='时间轴', 
+        y='销量', 
+        color='支数', 
+        facet_col='支数', 
+        facet_col_wrap=3, # 增加每行数量，减少总行数，防止报错
+        title="热门规格独立销量趋势",
+        height=600 # 增加总高度
+    )
+    # 自动调整子图标题，防止重叠
+    fig_spec_line.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
     st.plotly_chart(fig_spec_line, use_container_width=True)
 
 with col4:
-    # 百分比堆叠面积图，看份额变化
-    fig_spec_area = px.area(spec_data, x='时间轴', y='销量', color='支数', 
-                            groupnorm='percent', title="各规格市场份额占比变化 (100%堆叠)")
+    # 百分比堆叠图，看这些热门规格之间的竞争关系
+    fig_spec_area = px.area(
+        spec_data, 
+        x='时间轴', 
+        y='销量', 
+        color='支数', 
+        groupnorm='percent', 
+        title="热门规格市场份额变化 (100%堆叠)"
+    )
     st.plotly_chart(fig_spec_area, use_container_width=True)
-
-st.markdown("---")
 
 # 板块三：价格段与销量
 st.header("3️⃣ 价格段月度走势")
