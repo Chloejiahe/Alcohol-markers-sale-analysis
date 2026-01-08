@@ -91,10 +91,10 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---")
 
-# --- 2.2 市场份额图 (单点交互修正版) ---
+# --- 2.2 市场份额图 (深度强制单点版) ---
 st.subheader("📊 核心规格市场份额变化")
 
-# 1. 预计算占比
+# 1. 预计算占比 (保持不变)
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
@@ -106,39 +106,45 @@ fig_spec_area = px.area(
     color='支数', 
     height=500,
     title="100% 市场份额分布推移",
-    custom_data=['销量', '支数'] 
+    custom_data=['销量', '支数']
 )
 
-# 3. 设置鼠标悬停行为
+# 3. 【核心修复：双重强制】
+# 第一重：遍历所有数据层，强制设置 hoverinfo
+for trace in fig_spec_area.data:
+    trace.hoveron = 'points+fills' # 只在点和填充处触发
+    # 强制将 hoverinfo 设置为 'text' 或 'y'，防止其调用默认的对比逻辑
+    trace.hoverinfo = 'text' 
+
+# 第二重：更新交互模板
 fig_spec_area.update_traces(
-    hoveron='points+fills', # 确保点击颜色块也能触发
     hovertemplate="<b>规格: %{customdata[1]} 支</b><br>" + 
                   "当前份额: %{y:.1%}<br>" + 
                   "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
 )
 
-# 4. 强制 Layout 设置 (这是第一重保险)
+# 4. 强制 Layout 设置
 fig_spec_area.update_layout(
-    hovermode="closest",      # 强制单点模式
+    hovermode="closest",      # 强制单点
+    clickmode="event+select", # 进一步锁定点击行为
     xaxis=dict(
-        showspikes=False,     # 彻底关掉那根虚线
-        spikemode="toaxis"
+        showspikes=False,     # 必须关闭虚线
+        spikemode="toaxis",
+        # 确保 X 轴不会因为 hover 产生交互线
+        hoverformat=None      
     ),
-    xaxis_tickangle=-45,
     yaxis_tickformat='.0%',
-    yaxis_title="市场份额占比",
     hoverlabel=dict(namelength=0)
 )
 
-# 5. 在渲染时通过 config 禁用对比按钮 (这是第二重保险，解决你找不到切换按钮的问题)
+# 5. 【第三重保险：禁用工具栏干扰】
 st.plotly_chart(
     fig_spec_area, 
     use_container_width=True,
     config={
-        # 移除工具栏中的“对比数据”按钮，让它只能处于“单点显示”状态
-        'modeBarButtonsToRemove': ['hoverCompareCartesian', 'hoverClosestCartesian'],
-        'displaylogo': False,
-        'scrollZoom': False
+        # 彻底移除可能切换回“对比模式”的按钮
+        'modeBarButtonsToRemove': ['hoverCompareCartesian', 'hoverClosestCartesian', 'toggleSpikelines'],
+        'displaylogo': False
     }
 )
 
