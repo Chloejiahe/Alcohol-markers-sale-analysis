@@ -91,62 +91,43 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---")
 
-# --- 2.2 市场份额图 (深度强制单点版) ---
+# --- 2.2 市场份额图 (深度修复数据逻辑版) ---
 st.subheader("📊 核心规格市场份额变化")
+st.info("💡 已修复数据对齐问题。鼠标移至图上可实时对比：**市场占比** 与 **真实销量**。")
 
-# 1. 预计算占比
+# 第一步：手动计算占比，确保数据万无一无
+# 计算每个月总销量
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
+# 计算占比百分比
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
-import plotly.graph_objects as go
-
-# 第二步：使用go.Figure创建图表
-fig_spec_area = go.Figure()
-
-# 为每个支数创建独立的trace
-for 支数 in spec_data['支数'].unique():
-    df_subset = spec_data[spec_data['支数'] == 支数].sort_values('时间轴')
-    
-    fig_spec_area.add_trace(go.Scatter(
-        x=df_subset['时间轴'],
-        y=df_subset['占比'],
-        mode='lines',
-        name=f"{支数}支",
-        stackgroup='one',
-        line=dict(width=0.5),
-        fillcolor=None,  # 不设置fillcolor，让stackgroup自动处理填充
-        customdata=df_subset['销量'].values.reshape(-1, 1),
-        hovertemplate=(
-            "<b>规格: " + str(支数) + "支</b><br>" +
-            "月份: %{x}<br>" +
-            "市场占比: %{y:.1%}<br>" +
-            "具体销量: %{customdata[0]:,.0f}支<extra></extra>"
-        )
-    ))
-
-# 第三步：布局设置
-fig_spec_area.update_layout(
-    title="100% 市场份额分布推移 (精确数值版)",
+# 第二步：绘图 (不再使用 groupnorm='percent'，改用手动计算好的占比)
+fig_spec_area = px.area(
+    spec_data, 
+    x='时间轴', 
+    y='占比', # 坐标轴改用我们算好的占比
+    color='支数', 
     height=500,
-    xaxis_tickangle=-45,
-    hovermode="closest",  # 关键修改：改为closest
-    yaxis_tickformat='.0%',
-    yaxis_title="市场份额占比",
-    showlegend=True
+    title="100% 市场份额分布推移 (精确数值版)",
+    # 将原始销量存入 custom_data 供悬浮窗调用
+    custom_data=['销量'] 
 )
 
-# 禁用所有可能干扰hover的功能
-st.plotly_chart(
-    fig_spec_area, 
-    use_container_width=True,
-    config={
-        'modeBarButtonsToRemove': [
-            'hoverCompareCartesian', 
-            'hoverClosestCartesian',
-            'toggleSpikelines'
-        ]
-    }
+# 第三步：定制悬浮窗，直接引用预算好的数据
+fig_spec_area.update_traces(
+    hovertemplate="<b>规格: %{fullData.name}</b><br>" + 
+                  "月份: %{x}<br>" + 
+                  "市场占比: %{y:.1%}<br>" + 
+                  "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
 )
+
+fig_spec_area.update_layout(
+    xaxis_tickangle=-45,
+    hovermode="x unified",
+    yaxis_tickformat='.0%', # 让左侧 Y 轴显示百分比格式
+    yaxis_title="市场份额占比"
+)
+st.plotly_chart(fig_spec_area, use_container_width=True)
 
 # --- 板块三：价格段分析 ---
 st.header("3️⃣ 价格段深度分析")
