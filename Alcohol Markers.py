@@ -112,9 +112,8 @@ fig_spec_area = px.area(
 # 3. 【核心修复：双重强制】
 # 第一重：遍历所有数据层，强制设置 hoverinfo
 for trace in fig_spec_area.data:
-    trace.hoveron = 'points+fills' # 只在点和填充处触发
-    # 强制将 hoverinfo 设置为 'text' 或 'y'，防止其调用默认的对比逻辑
-    trace.hoverinfo = 'text' 
+    trace.hoveron = 'points'  # 只允许在点上触发，去掉fills
+    trace.hoverinfo = 'text'  # 只显示文本
 
 # 第二重：更新交互模板
 fig_spec_area.update_traces(
@@ -126,6 +125,7 @@ fig_spec_area.update_traces(
 # 4. 强制 Layout 设置
 fig_spec_area.update_layout(
     hovermode="closest",      # 强制单点
+    hoverdistance=10,         # 缩小悬停触发距离，默认20，越小越需要接近点
     clickmode="event+select", # 进一步锁定点击行为
     xaxis=dict(
         showspikes=False,     # 必须关闭虚线
@@ -135,17 +135,6 @@ fig_spec_area.update_layout(
     ),
     yaxis_tickformat='.0%',
     hoverlabel=dict(namelength=0)
-)
-
-# 5. 【第三重保险：禁用工具栏干扰】
-st.plotly_chart(
-    fig_spec_area, 
-    use_container_width=True,
-    config={
-        # 彻底移除可能切换回“对比模式”的按钮
-        'modeBarButtonsToRemove': ['hoverCompareCartesian', 'hoverClosestCartesian', 'toggleSpikelines'],
-        'displaylogo': False
-    }
 )
 
 # --- 板块三：价格段分析 ---
