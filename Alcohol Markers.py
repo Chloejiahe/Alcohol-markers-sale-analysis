@@ -91,10 +91,10 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---")
 
-# --- 2.2 市场份额图 (终极彻底修复版) ---
+# --- 2.2 市场份额图 (强制单点显示版) ---
 st.subheader("📊 核心规格市场份额变化")
 
-# 1. 预计算占比（确保数据无误）
+# 1. 预计算占比
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
@@ -109,29 +109,30 @@ fig_spec_area = px.area(
     custom_data=['销量', '支数']
 )
 
-# 3. 【最核心修改】强制独立悬浮逻辑
-# 这里我们用 update_traces 覆盖掉 px.area 默认生成的全局关联
+# 3. 【最核心修改】不仅修改模板，还要强制交互只针对“当前图层”
 fig_spec_area.update_traces(
-    # hoverinfo="text" 告诉 Plotly 忽略其他所有默认的坐标轴数据展示
-    hoverinfo="text",
-    # 重新定义只属于“当前这点”的模板
+    # hoveron='points+fills' 是关键！它告诉程序：鼠标指到哪个色块，就只处理哪个色块
+    hoveron='points+fills',
     hovertemplate="<b>规格: %{customdata[1]} 支</b><br>" + 
                   "当前份额: %{y:.1%}<br>" + 
                   "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
 )
 
-# 4. 【次核心修改】禁用布局层面的所有“对齐”行为
+# 4. 【彻底禁用全局行为】
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    # 强制设为 closest，并且在 hoverlabel 中禁用“对齐名称”
+    # 强制 closest 交互
     hovermode="closest", 
-    hoverlabel=dict(namelength=0), # 隐藏侧边名称标签
     yaxis_tickformat='.0%',
     yaxis_title="市场份额占比",
+    # 彻底关掉那个触发“全列数据显示”的垂直虚线(Spikes)
     xaxis=dict(
-        showspikes=False,  # 彻底关掉那根垂直虚线
-        spikemode="toaxis" # 即使有辅助线也只指向坐标轴，不穿过色块
-    )
+        showspikes=False, 
+        spikemode="toaxis", 
+        matches=None # 强制不与其他属性匹配
+    ),
+    # 强制悬浮框不进行“比较”
+    hoverlabel=dict(namelength=0)
 )
 
 st.plotly_chart(fig_spec_area, use_container_width=True)
