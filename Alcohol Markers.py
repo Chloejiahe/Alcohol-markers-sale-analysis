@@ -86,7 +86,7 @@ spec_data_all['占比'] = spec_data_all['销量'] / total_monthly_all.replace(0,
 
 fig_spec_area = go.Figure()
 for cat in sorted(spec_data_all['支数'].unique()):
-    df_sub = spec_data_all[spec_data_all['支_数'] == cat]
+    df_sub = spec_data_all[spec_data_all['支数'] == cat]
     fig_spec_area.add_trace(go.Scatter(
         x=df_sub['时间轴'], 
         y=df_sub['占比'], 
