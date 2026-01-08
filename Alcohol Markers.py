@@ -91,34 +91,30 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---")
 
-# --- 2.2 市场份额图 (深度修复数据逻辑版) ---
+# --- 2.2 市场份额图 (深度修复完成版) ---
 st.subheader("📊 核心规格市场份额变化")
-st.info("💡 已修复数据对齐问题。鼠标移至图上可实时对比：**市场占比** 与 **真实销量**。")
+st.info("💡 鼠标移至**具体数据点**上即可查看单一规格的详细信息。")
 
-# 第一步：手动计算占比，确保数据万无一失
-# 计算每个月总销量
+# 第一步：手动计算占比（保持不变）
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
-# 处理除零错误：将总销量为0的月份替换为NaN，这样占比就是NaN，在图中不会显示
 total_monthly = total_monthly.replace(0, np.nan)
-# 计算占比百分比
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
-# 第二步：绘图 (不再使用 groupnorm='percent'，改用手动计算好的占比)
+# 第二步：绘图
 fig_spec_area = px.area(
     spec_data, 
     x='时间轴', 
-    y='占比', # 坐标轴改用我们算好的占比
+    y='占比', 
     color='支数', 
     height=500,
     title="100% 市场份额分布推移 (精确数值版)",
-    # 将原始销量存入 custom_data 供悬浮窗调用
     custom_data=['销量'] 
 )
 
-# 第三步：定制悬浮窗
+# 第三步：定制悬浮窗 (关键修改)
 fig_spec_area.update_traces(
-    # 强制让鼠标只有悬停在当前填充区域（points+fills）时才触发
-    hoveron='points+fills', 
+    # 将 hoveron 改为 'points'，这是解决“显示一长串”最有效的方法
+    hoveron='points', 
     hovertemplate="<b>规格: %{trace.name}</b><br>" + 
                   "月份: %{x}<br>" + 
                   "市场占比: %{y:.1%}<br>" + 
@@ -127,9 +123,21 @@ fig_spec_area.update_traces(
 
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    hovermode="closest", # 配合 hoveron 使用
+    # 强制设为 closest，并增加悬停距离限制
+    hovermode="closest", 
+    hoverdistance=10, 
     yaxis_tickformat='.0%', 
     yaxis_title="市场份额占比"
+)
+
+# 第四步：在显示时锁定交互配置 (防止工具栏干扰)
+st.plotly_chart(
+    fig_spec_area, 
+    use_container_width=True,
+    config={
+        # 移除工具栏中容易误触切换到“对比模式”的按钮
+        'modeBarButtonsToRemove': ['toggleHover', 'hoverCompareCartesian', 'hoverClosestCartesian']
+    }
 )
 
 # --- 板块三：价格段分析 ---
