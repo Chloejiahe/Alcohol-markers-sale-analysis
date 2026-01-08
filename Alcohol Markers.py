@@ -4,7 +4,7 @@ import plotly.express as px
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="酒精笔销量深度看板", layout="wide")
-st.title("📊 酒精笔市场趋势监测看板 (优化版)")
+st.title("📊 酒精笔市场趋势监测看板")
 st.markdown("---")
 
 # --- 2. 数据处理 ---
@@ -64,67 +64,63 @@ else:
 
 st.markdown("---")
 
-# --- 板块二：规格支数分析 (分行全宽展示版) ---
+# --- 板块二：规格支数分析 ---
 st.header("2️⃣ 规格支数：核心规格增长分析")
 st.info("💡 系统已自动筛选销量前 10 的规格。现已调整为分行展示，方便您仔细观察每种规格的起伏。")
 
-# 1. 聚合并获取前 10 名
+# 获取前 10 名
 spec_total = filtered_df.groupby('支数')['销量'].sum().sort_values(ascending=False).reset_index()
 top_10_specs = spec_total.head(10)['支数'].tolist()
-spec_data = filtered_df[filtered_df['支_num' if '支_num' in filtered_df.columns else '支数'].isin(top_10_specs)].groupby(['时间轴', '支数'])['销量'].sum().reset_index()
+spec_data = filtered_df[filtered_df['支数'].isin(top_10_specs)].groupby(['时间轴', '支数'])['销量'].sum().reset_index()
 
-# 第一行：全宽展示【独立趋势图】
-st.subheader("📈 各核心规格独立销量趋势 (分图查看)")
+# 2.1 独立趋势图
+st.subheader("📈 各核心规格独立销量趋势")
 fig_spec_line = px.line(
     spec_data, 
     x='时间轴', 
     y='销量', 
     color='支数', 
-    facet_col='支数', 
-    facet_col_wrap=2,  # 改为每行只放2个图，让图表变大
-    height=800,        # 增加整体高度
+    facet_col='支_num' if '支_num' in spec_data.columns else '支数', 
+    facet_col_wrap=2, 
+    height=800, 
     title="各规格月度销量波动"
 )
-# 优化子图标题：只显示数字（支数），不显示 "支数="
 fig_spec_line.for_each_annotation(lambda a: a.update(text=f"规格：{a.text.split('=')[-1]} 支"))
-# 隐藏右侧重复的图例，因为子图标题已经标明了
 fig_spec_line.update_layout(showlegend=False)
 st.plotly_chart(fig_spec_line, use_container_width=True)
 
-st.markdown("---") # 逻辑分割线
+st.markdown("---")
 
-with col_spec2:
-    st.subheader("📊 核心规格市场份额变化")
-    st.info("💡 此图展示各规格销量的百分比占比，用于观察市场重心是否向某个规格偏移。")
-    
-    # 重新构建面积图
-    fig_spec_area = px.area(
-        spec_data, 
-        x='时间轴', 
-        y='销量', 
-        color='支数', 
-        groupnorm='percent', 
-        height=500,
-        title="100% 市场份额分布推移",
-        # 关键点：告诉 Plotly 在悬浮窗里包含 '销量' 原始数据
-        hover_data={'销量': ':,.0f'} 
-    )
+# 2.2 市场份额图 (修复了之前的 col_spec2 报错)
+st.subheader("📊 核心规格市场份额变化")
+st.info("💡 此图展示各规格销量的百分比占比，用于观察市场重心是否向大规格偏移。")
 
-    # 深度定制悬浮窗的外观
-    fig_spec_area.update_traces(
-        mode="index", # 鼠标移上去时，显示该时间点所有规格的数据，方便对比
-        hovertemplate="<b>规格: %{fullData.name}</b><br>" + 
-                      "时间: %{x}<br>" + 
-                      "当前占比: %{y:.1%}<br>" + 
-                      "具体销量: %{customdata[0]} 支<extra></extra>"
-    )
+fig_spec_area = px.area(
+    spec_data, 
+    x='时间轴', 
+    y='销量', 
+    color='支数', 
+    groupnorm='percent', 
+    height=500,
+    title="100% 市场份额分布推移",
+    hover_data={'销量': ':,.0f'} 
+)
 
-    fig_spec_area.update_layout(
-        xaxis_tickangle=-45,
-        hovermode="x unified" # 这一行非常管用，鼠标放上去会有一条垂直线，显示当天所有规格的对比
-    )
-    
-    st.plotly_chart(fig_spec_area, use_container_width=True)
+fig_spec_area.update_traces(
+    mode="index",
+    hovertemplate="<b>规格: %{fullData.name}</b><br>" + 
+                  "时间: %{x}<br>" + 
+                  "当前占比: %{y:.1%}<br>" + 
+                  "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
+)
+
+fig_spec_area.update_layout(
+    xaxis_tickangle=-45,
+    hovermode="x unified"
+)
+st.plotly_chart(fig_spec_area, use_container_width=True)
+
+st.markdown("---")
     
 # --- 板块三：价格段分析 (分行展示优化版) ---
 st.header("3️⃣ 价格段深度分析")
