@@ -76,50 +76,45 @@ st.header("2️⃣ 规格支数：核心规格分析")
 st.info("💡 系统已自动筛选销量前 10 的规格。")
 
 # 图表 1：市场份额变化 (固定显示 Top 10，不受局部按钮影响)
-st.subheader("📊 核心规格市场份额推移")
+st.subheader("📊 核心规格市场份额推移 (Top 10)")
+
 spec_total = filtered_df.groupby('支数')['销量'].sum().sort_values(ascending=False).reset_index()
+
 top_10_specs = spec_total.head(10)['支数'].tolist()
+
 spec_data_all = filtered_df[filtered_df['支数'].isin(top_10_specs)].groupby(['时间轴', '支数'])['销量'].sum().reset_index()
 
+
+
 total_monthly_all = spec_data_all.groupby('时间轴')['销量'].transform('sum')
+
 spec_data_all['占比'] = spec_data_all['销量'] / total_monthly_all.replace(0, np.nan)
 
+
+
 fig_spec_area = go.Figure()
+
 for cat in sorted(spec_data_all['支数'].unique()):
+
     df_sub = spec_data_all[spec_data_all['支数'] == cat]
+
     fig_spec_area.add_trace(go.Scatter(
-        x=df_sub['时间轴'], 
-        y=df_sub['占比'], 
-        name=f"{cat}支",
-        stackgroup='one', 
-        fill='tonexty', 
-        # 修改点 1: 增加 hoveron，确保悬停时依然能看到点和轴的信息
-        hoveron='points+fills', 
+
+        x=df_sub['时间轴'], y=df_sub['占比'], name=f"{cat}支",
+
+        stackgroup='one', fill='tonexty', hoveron='points',
+
         customdata=df_sub['销量'],
-        # 修改点 2: 在悬停模板中加入时间轴信息 %{x}
-        hovertemplate=(
-            "<b>时间: %{x}</b><br>" +
-            "规格: %{fullData.name}<br>" +
-            "占比: %{y:.1%}<br>" +
-            "销量: %{customdata:,.0f}<extra></extra>"
-        )
+
+        hovertemplate="规格: %{fullData.name}<br>占比: %{y:.1%}<br>销量: %{customdata:,.0f}<extra></extra>"
+
     ))
 
-# 强化 xaxis 设置，确保标签显示并旋转以防重叠
-fig_spec_area.update_layout(
-    hovermode="x unified",     # 建议使用 unified 模式，一次查看该时间点所有规格
-    yaxis_tickformat='.0%', 
-    height=500,
-    xaxis=dict(
-        type='category',       # 强制将时间轴视为类别，确保每个月份都显示
-        tickangle=-45,         # 标签倾斜 45 度
-        showgrid=True,
-        title="时间轴"
-    ),
-    yaxis=dict(title="市场份额占比")
-)
+fig_spec_area.update_layout(hovermode="closest", yaxis_tickformat='.0%', height=500)
 
 st.plotly_chart(fig_spec_area, use_container_width=True)
+# 局部按钮 (多选模式)
+selected_specs = st.pills("筛选特定规格 (支持多选)：", [str(s) for s in sorted(top_10_specs)], selection_mode="multi")
 
 # 图表 2：细分销量趋势
 if selected_specs:
