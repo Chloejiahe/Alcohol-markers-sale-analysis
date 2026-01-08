@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import numpy as np  # 修复 1: 必须导入 numpy
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="酒精笔销量深度看板", layout="wide")
-st.title("📊 酒精笔市场趋势监测看板 (修复版)")
+st.title("📊 酒精笔市场趋势监测看板 (修复完成版)")
 st.markdown("---")
 
 # --- 2. 数据处理 ---
@@ -14,9 +15,8 @@ def load_data():
     file_path = "酒精笔销量数据.xlsx" 
     try:
         df = pd.read_excel(file_path, engine='openpyxl')
-        df.columns = [c.strip() for c in df.columns] # 去空格
+        df.columns = [c.strip() for c in df.columns] 
         
-        # 强制排序时间轴
         df['month(month)'] = df['month(month)'].astype(str)
         df = df.sort_values('month(month)')
         df['时间轴'] = df['month(month)'].apply(lambda x: f"{x[:4]}-{x[4:]}")
@@ -40,7 +40,6 @@ if not df.empty:
     age_options = ["全部", "是", "否"]
     selected_age = st.sidebar.selectbox("2. 受众群体 (是否8+)", age_options, index=0)
 
-    # 执行过滤
     filtered_df = df[df['month(month)'].str[:4].isin(selected_years)].copy()
     if selected_age != "全部":
         filtered_df = filtered_df[filtered_df['是否8+'] == selected_age]
@@ -56,14 +55,15 @@ if selected_age == "全部":
     with col1:
         st.subheader("8+ 市场")
         d1 = filtered_df[filtered_df['是否8+'] == '是'].groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index()
-        st.plotly_chart(px.line(d1, x='时间轴', y='销量', color='笔头类型', markers=True), use_container_width=True)
+        # 修复 2: 2026版 Streamlit 建议使用 width='stretch'
+        st.plotly_chart(px.line(d1, x='时间轴', y='销量', color='笔头类型', markers=True), width='stretch')
     with col2:
         st.subheader("非 8+ 市场")
         d2 = filtered_df[filtered_df['是否8+'] == '否'].groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index()
-        st.plotly_chart(px.line(d2, x='时间轴', y='销量', color='笔头类型', markers=True), use_container_width=True)
+        st.plotly_chart(px.line(d2, x='时间轴', y='销量', color='笔头类型', markers=True), width='stretch')
 else:
     d3 = filtered_df.groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index()
-    st.plotly_chart(px.line(d3, x='时间轴', y='销量', color='笔头类型', markers=True), use_container_width=True)
+    st.plotly_chart(px.line(d3, x='时间轴', y='销量', color='笔头类型', markers=True), width='stretch')
 
 st.markdown("---")
 
@@ -88,38 +88,34 @@ fig_spec_line = px.line(
 )
 fig_spec_line.for_each_annotation(lambda a: a.update(text=f"规格：{a.text.split('=')[-1]} 支"))
 fig_spec_line.update_layout(showlegend=False)
-st.plotly_chart(fig_spec_line, use_container_width=True)
+st.plotly_chart(fig_spec_line, width='stretch')
 
 st.markdown("---")
 
-# --- 2.2 市场份额图 (终极方案版) ---
+# --- 2.2 市场份额图 (核心修复版) ---
 st.subheader("📊 核心规格市场份额变化")
 
-# 第一步：手动计算占比（保持不变）
+# 第一步：手动计算占比
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
 total_monthly = total_monthly.replace(0, np.nan)
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
-# 第二步：使用 Graph Objects (go) 逐个添加图层
-# 这样可以彻底打破 px.area 的全局绑定逻辑
+# 第二步：使用 Graph Objects 逐个添加
 fig_spec_area = go.Figure()
-
-# 获取所有规格类型并排序
 categories = sorted(spec_data['支数'].unique())
 
 for cat in categories:
     df_sub = spec_data[spec_data['支数'] == cat]
-    
     fig_spec_area.add_trace(go.Scatter(
         x=df_sub['时间轴'],
         y=df_sub['占比'],
         name=str(cat),
-        mode='lines',      # 纯线模式，悬停最灵
-        stackgroup='one',  # 开启堆叠逻辑，实现面积图效果
-        fill='tonexty',    # 填充颜色
-        # 传入销量数据
+        mode='lines',      
+        stackgroup='one',  
+        fill='tonexty',    
         customdata=df_sub['销量'],
-        # 核心：只定义单个 trace 的悬停模板
+        # 修复 3: 限制 hover 触发区域
+        hoveron='points+fills', 
         hovertemplate=(
             "<b>规格: " + str(cat) + "</b><br>" +
             "月份: %{x}<br>" +
@@ -128,23 +124,28 @@ for cat in categories:
         )
     ))
 
-# 第三步：强制设置
+# 第三步：强化布局设置
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    hovermode="closest",       # 关键：只显示最近的点
-    hoverlabel=dict(namelength=-1),
+    hovermode="closest",       # 必须为 closest
+    hoverdistance=10,          # 鼠标距离点10像素内才触发，防止垂直线触发所有数据
+    spikedistance=-1,          # 关闭辅助线触发
     yaxis_tickformat='.0%',
     yaxis_title="市场份额占比",
-    height=500,
-    margin=dict(t=50, b=50, l=50, r=50)
+    height=500
 )
 
-# 第四步：在 Streamlit 中显示
-st.plotly_chart(fig_spec_area, use_container_width=True)
+# 第四步：锁定交互工具栏
+st.plotly_chart(
+    fig_spec_area, 
+    width='stretch', 
+    config={
+        'modeBarButtonsToRemove': ['hoverCompareCartesian', 'toggleHover'] # 彻底移除对比按钮
+    }
+)
 
 # --- 板块三：价格段分析 ---
 st.header("3️⃣ 价格段深度分析")
-
 st.subheader("📊 整体市场价格构成")
 fig_pie = px.pie(
     filtered_df, 
@@ -153,8 +154,8 @@ fig_pie = px.pie(
     hole=0.4,
     color_discrete_sequence=px.colors.qualitative.Pastel
 )
-fig_pie.update_traces(textinfo='percent+label', pull=[0.05]*len(filtered_df['价格段'].unique())) 
-st.plotly_chart(fig_pie, use_container_width=True)
+fig_pie.update_traces(textinfo='percent+label') 
+st.plotly_chart(fig_pie, width='stretch')
 
 st.markdown("---")
 
@@ -169,4 +170,4 @@ fig_price = px.bar(
     height=500
 )
 fig_price.update_layout(xaxis_tickangle=-45)
-st.plotly_chart(fig_price, use_container_width=True)
+st.plotly_chart(fig_price, width='stretch')
