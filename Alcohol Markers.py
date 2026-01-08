@@ -95,7 +95,7 @@ st.markdown("---")
 st.subheader("📊 核心规格市场份额变化")
 st.info("💡 此图展示各规格销量的百分比占比。鼠标移至图上可同时查看 **具体销量** 与 **占比百分比**。")
 
-# 1. 预计算占比
+# 1. 确保数据预计算准确
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
@@ -107,26 +107,25 @@ fig_spec_area = px.area(
     color='支数', 
     height=500,
     title="100% 市场份额分布推移",
-    custom_data=['销量', '支数'] # 传入原始销量和支数
+    custom_data=['销量', '支数'] # 传入原始数据
 )
 
-# 3. 定制精简悬浮窗
+# 3. 定制精简悬浮窗 (关键：使用 <extra></extra> 隐藏侧边栏信息)
 fig_spec_area.update_traces(
-    # hovertemplate 只保留核心信息，<extra></extra> 用于去掉右侧多余的标签
     hovertemplate="<b>规格: %{customdata[1]} 支</b><br>" + 
-                  "占比: %{y:.1%}<br>" + 
-                  "销量: %{customdata[0]:,.0f} 支<extra></extra>",
+                  "当前份额: %{y:.1%}<br>" + 
+                  "具体销量: %{customdata[0]:,.0f} 支<extra></extra>", # extra标签是去除右侧悬浮标签的关键
 )
 
-# 4. 修改关键布局：去掉 x unified
+# 4. 彻底修正交互模式
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    hovermode="closest", # 核心修改：只显示鼠标最近的点的数据
+    # 核心修复点：将 'x unified' (长列表模式) 替换为 'closest' (仅显示当前选中点)
+    hovermode="closest", 
     yaxis_tickformat='.0%',
     yaxis_title="市场份额占比",
-    # 进一步减少视觉干扰：如果需要，可以隐藏网格线
-    xaxis=dict(showgrid=False),
-    yaxis=dict(showgrid=True)
+    # 辅助功能：让鼠标停在颜色块上时，该颜色块稍微加深，增加反馈感
+    hoverlabel=dict(bgcolor="white", font_size=12)
 )
 
 st.plotly_chart(fig_spec_area, use_container_width=True)
