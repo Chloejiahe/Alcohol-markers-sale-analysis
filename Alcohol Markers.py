@@ -4,7 +4,7 @@ import plotly.express as px
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="酒精笔销量深度看板", layout="wide")
-st.title("📊 酒精笔市场趋势监测看板 (最终修复版)")
+st.title("📊 酒精笔市场趋势监测看板 (修复版)")
 st.markdown("---")
 
 # --- 2. 数据处理 ---
@@ -30,7 +30,7 @@ def load_data():
 
 df = load_data()
 
-# --- 3. 增强版侧边栏 ---
+# --- 3. 侧边栏 ---
 st.sidebar.header("🎛️ 全局筛选")
 if not df.empty:
     years = sorted(list(set(df['month(month)'].str[:4])))
@@ -68,9 +68,8 @@ st.markdown("---")
 
 # --- 板块二：规格支数分析 ---
 st.header("2️⃣ 规格支数：核心规格增长分析")
-st.info("💡 系统已自动筛选销量前 10 的规格。鼠标移至份额图可同时查看具体销量与百分比。")
+st.info("💡 已筛选销量前 10 规格。鼠标移至份额图可查看具体数值。")
 
-# 获取前 10 名
 spec_total = filtered_df.groupby('支数')['销量'].sum().sort_values(ascending=False).reset_index()
 top_10_specs = spec_total.head(10)['支数'].tolist()
 spec_data = filtered_df[filtered_df['支数'].isin(top_10_specs)].groupby(['时间轴', '支数'])['销量'].sum().reset_index()
@@ -84,8 +83,7 @@ fig_spec_line = px.line(
     color='支数', 
     facet_col='支数', 
     facet_col_wrap=2, 
-    height=800, 
-    title="各规格月度销量波动"
+    height=800
 )
 fig_spec_line.for_each_annotation(lambda a: a.update(text=f"规格：{a.text.split('=')[-1]} 支"))
 fig_spec_line.update_layout(showlegend=False)
@@ -93,7 +91,7 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---")
 
-# 2.2 市场份额图 (注意：这里修复了缩进报错)
+# 2.2 市场份额图 (核心修复点)
 st.subheader("📊 核心规格市场份额变化")
 fig_spec_area = px.area(
     spec_data, 
@@ -103,20 +101,20 @@ fig_spec_area = px.area(
     groupnorm='percent', 
     height=500,
     title="100% 市场份额分布推移",
-    hover_data={'销量': ':,.0f'} 
+    hover_data={'销量': True} # 引入原始销量数据
 )
 
+# 修复：去掉了非法的 mode="index"
 fig_spec_area.update_traces(
-    mode="index",
     hovertemplate="<b>规格: %{fullData.name}</b><br>" + 
-                  "时间: %{x}<br>" + 
-                  "当前占比: %{y:.1%}<br>" + 
+                  "月份: %{x}<br>" + 
+                  "当前份额: %{y:.1%}<br>" + 
                   "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
 )
 
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    hovermode="x unified"
+    hovermode="x unified" # 实现垂直线对比所有规格的功能
 )
 st.plotly_chart(fig_spec_area, use_container_width=True)
 
@@ -145,7 +143,6 @@ fig_price = px.bar(
     x='时间轴', 
     y='销量', 
     color='价格段', 
-    title="不同价格段的销量波动",
     barmode='group', 
     height=500
 )
