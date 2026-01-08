@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="酒精笔销量深度看板", layout="wide")
@@ -91,54 +92,55 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---")
 
-# --- 2.2 市场份额图 (深度修复完成版) ---
+# --- 2.2 市场份额图 (终极方案版) ---
 st.subheader("📊 核心规格市场份额变化")
-st.info("💡 鼠标移至**具体数据点**上即可查看单一规格的详细信息。")
 
 # 第一步：手动计算占比（保持不变）
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
 total_monthly = total_monthly.replace(0, np.nan)
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
-# 第二步：绘图
-fig_spec_area = px.area(
-    spec_data, 
-    x='时间轴', 
-    y='占比', 
-    color='支数', 
-    height=500,
-    title="100% 市场份额分布推移 (精确数值版)",
-    custom_data=['销量'] 
-)
+# 第二步：使用 Graph Objects (go) 逐个添加图层
+# 这样可以彻底打破 px.area 的全局绑定逻辑
+fig_spec_area = go.Figure()
 
-# 第三步：定制悬浮窗 (关键修改)
-fig_spec_area.update_traces(
-    # 将 hoveron 改为 'points'，这是解决“显示一长串”最有效的方法
-    hoveron='points', 
-    hovertemplate="<b>规格: %{trace.name}</b><br>" + 
-                  "月份: %{x}<br>" + 
-                  "市场占比: %{y:.1%}<br>" + 
-                  "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
-)
+# 获取所有规格类型并排序
+categories = sorted(spec_data['支数'].unique())
 
+for cat in categories:
+    df_sub = spec_data[spec_data['支数'] == cat]
+    
+    fig_spec_area.add_trace(go.Scatter(
+        x=df_sub['时间轴'],
+        y=df_sub['占比'],
+        name=str(cat),
+        mode='lines',      # 纯线模式，悬停最灵敏
+        stackgroup='one',  # 开启堆叠逻辑，实现面积图效果
+        fill='tonexty',    # 填充颜色
+        # 传入销量数据
+        customdata=df_sub['销量'],
+        # 核心：只定义单个 trace 的悬停模板
+        hovertemplate=(
+            "<b>规格: " + str(cat) + "</b><br>" +
+            "月份: %{x}<br>" +
+            "市场占比: %{y:.1%}<br>" +
+            "具体销量: %{customdata:,.0f} 支<extra></extra>"
+        )
+    ))
+
+# 第三步：强制设置
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    # 强制设为 closest，并增加悬停距离限制
-    hovermode="closest", 
-    hoverdistance=10, 
-    yaxis_tickformat='.0%', 
-    yaxis_title="市场份额占比"
+    hovermode="closest",       # 关键：只显示最近的点
+    hoverlabel=dict(namelength=-1),
+    yaxis_tickformat='.0%',
+    yaxis_title="市场份额占比",
+    height=500,
+    margin=dict(t=50, b=50, l=50, r=50)
 )
 
-# 第四步：在显示时锁定交互配置 (防止工具栏干扰)
-st.plotly_chart(
-    fig_spec_area, 
-    use_container_width=True,
-    config={
-        # 移除工具栏中容易误触切换到“对比模式”的按钮
-        'modeBarButtonsToRemove': ['toggleHover', 'hoverCompareCartesian', 'hoverClosestCartesian']
-    }
-)
+# 第四步：在 Streamlit 中显示
+st.plotly_chart(fig_spec_area, use_container_width=True)
 
 # --- 板块三：价格段分析 ---
 st.header("3️⃣ 价格段深度分析")
