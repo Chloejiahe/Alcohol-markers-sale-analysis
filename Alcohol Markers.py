@@ -94,11 +94,11 @@ st.markdown("---")
 # --- 2.2 市场份额图 (单点交互修正版) ---
 st.subheader("📊 核心规格市场份额变化")
 
-# 1. 预计算占比 (保持不变)
+# 1. 预计算占比
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
-# 2. 绘图 (保持不变)
+# 2. 绘图
 fig_spec_area = px.area(
     spec_data, 
     x='时间轴', 
@@ -106,45 +106,41 @@ fig_spec_area = px.area(
     color='支数', 
     height=500,
     title="100% 市场份额分布推移",
-    custom_data=['销量', '支数']  # 确保这里的数据顺序与 hovertemplate 对应
+    custom_data=['销量', '支数'] 
 )
 
-# =================================================================
-# 🛠️ 关键修改区域：解决“面板显示”问题的核心代码
-# =================================================================
-
-# 3. 设置鼠标悬停行为 (Traces)
-# hoveron='points+fills' 是堆叠图的关键，让鼠标在色块中间也能触发提示，而不仅是线条上
+# 3. 设置鼠标悬停行为
 fig_spec_area.update_traces(
-    hoveron='points+fills', 
+    hoveron='points+fills', # 确保点击颜色块也能触发
     hovertemplate="<b>规格: %{customdata[1]} 支</b><br>" + 
                   "当前份额: %{y:.1%}<br>" + 
                   "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
 )
 
-# 4. 强制单点模式 (Layout)
+# 4. 强制 Layout 设置 (这是第一重保险)
 fig_spec_area.update_layout(
-    # --- 核心修改 A: 交互模式 ---
-    hovermode="closest",  # 【重要】改为 closest，禁止显示所有数据的面板
-    
-    # --- 核心修改 B: 视觉清理 ---
+    hovermode="closest",      # 强制单点模式
     xaxis=dict(
-        showspikes=False,   # 关掉那条垂直虚线，避免视觉误导
+        showspikes=False,     # 彻底关掉那根虚线
         spikemode="toaxis"
     ),
-    
-    # 其他样式设置
     xaxis_tickangle=-45,
     yaxis_tickformat='.0%',
     yaxis_title="市场份额占比",
-    hoverlabel=dict(
-        bgcolor="white",    # 弹窗背景色
-        font_size=14,       # 字体大小
-        namelength=0        # 隐藏原本自带的 trace 名称，让弹窗更简洁
-    )
+    hoverlabel=dict(namelength=0)
 )
 
-st.plotly_chart(fig_spec_area, use_container_width=True)
+# 5. 在渲染时通过 config 禁用对比按钮 (这是第二重保险，解决你找不到切换按钮的问题)
+st.plotly_chart(
+    fig_spec_area, 
+    use_container_width=True,
+    config={
+        # 移除工具栏中的“对比数据”按钮，让它只能处于“单点显示”状态
+        'modeBarButtonsToRemove': ['hoverCompareCartesian', 'hoverClosestCartesian'],
+        'displaylogo': False,
+        'scrollZoom': False
+    }
+)
 
 # --- 板块三：价格段分析 ---
 st.header("3️⃣ 价格段深度分析")
