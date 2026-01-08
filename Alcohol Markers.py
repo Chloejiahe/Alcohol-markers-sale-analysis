@@ -6,7 +6,7 @@ import numpy as np
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="酒精笔销量深度看板", layout="wide")
-st.title("📊 酒精笔市场趋势监测看板 (局部交互版)")
+st.title("📊 酒精笔市场趋势监测看板 (全局同步版)")
 st.markdown("---")
 
 # --- 2. 数据处理 ---
@@ -29,57 +29,55 @@ def load_data():
 
 df = load_data()
 
-# --- 3. 侧边栏 ---
-st.sidebar.header("🎛️ 基础时间筛选")
+# --- 3. 侧边栏 (这里是你要的大型交互区) ---
+st.sidebar.header("🎛️ 全局核心筛选")
 if not df.empty:
+    # 3.1 时间筛选
     years = sorted(list(set(df['month(month)'].str[:4])))
-    selected_years = st.sidebar.multiselect("选择分析年份", years, default=years)
-    filtered_df = df[df['month(month)'].str[:4].isin(selected_years)].copy()
+    selected_years = st.sidebar.multiselect("1. 选择年份", years, default=years)
+    
+    # 3.2 市场分类筛选 (从板块一移动到这里)
+    # 使用 radio 或 selectbox 都可以，这里用 radio 更直观
+    selected_age = st.sidebar.radio("2. 市场分类 (是否8+)", ["全部", "是", "否"], index=0, help="切换 8+ 受众市场或非 8+ 市场")
+    
+    # 执行全局过滤
+    mask = df['month(month)'].str[:4].isin(selected_years)
+    if selected_age != "全部":
+        mask &= (df['是否8+'] == selected_age)
+    
+    filtered_df = df[mask].copy()
 else:
     st.stop()
 
 # --- 4. 看板布局 ---
 
 # --- 板块一：笔尖类型 ---
-st.header("1️⃣ 笔尖类型：不同市场销量起伏对比")
+st.header("1️⃣ 笔尖类型：销量趋势分析")
 
+# 局部药丸筛选：仅针对笔头
 all_tips = ["全部笔头"] + sorted(filtered_df['笔头类型'].unique().tolist())
-selected_tip = st.pills("点击下方按钮筛选特定笔头：", all_tips, default="全部笔头")
-selected_age_pill = st.segmented_control("切换市场分类：", ["全部市场", "8+ 市场", "非 8+ 市场"], default="全部市场")
+selected_tip = st.pills("细分笔头查看：", all_tips, default="全部笔头")
 
 d_tip = filtered_df.copy()
 if selected_tip != "全部笔头":
     d_tip = d_tip[d_tip['笔头类型'] == selected_tip]
 
-def plot_tip_line(data, title):
-    if data.empty:
-        st.warning(f"暂无 {title} 数据")
-        return
-    fig = px.line(data, x='时间轴', y='销量', color='笔头类型', markers=True, title=title)
-    st.plotly_chart(fig, width='stretch')
-
-if selected_age_pill == "全部市场":
-    st.subheader("8+ 市场情况")
-    plot_tip_line(d_tip[d_tip['是否8+'] == '是'].groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index(), "")
-    st.markdown("---")
-    st.subheader("非 8+ 市场情况")
-    plot_tip_line(d_tip[d_tip['是否8+'] == '否'].groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index(), "")
-elif selected_age_pill == "8+ 市场":
-    plot_tip_line(d_tip[d_tip['是否8+'] == '是'].groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index(), "8+ 市场趋势")
-else:
-    plot_tip_line(d_tip[d_tip['是否8+'] == '否'].groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index(), "非 8+ 市场趋势")
+# 绘图
+tip_trend = d_tip.groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index()
+fig_tip = px.line(tip_trend, x='时间轴', y='销量', color='笔头类型', markers=True, 
+                  title=f"当前市场 ({selected_age}) 下的笔头销量走势")
+st.plotly_chart(fig_tip, width='stretch')
 
 st.markdown("---")
 
 # --- 板块二：规格支数 ---
-st.header("2️⃣ 规格支数：核心规格增长分析")
+st.header("2️⃣ 规格支数：核心规格分析")
 
 spec_total = filtered_df.groupby('支数')['销量'].sum().sort_values(ascending=False).reset_index()
 top_10_specs = spec_total.head(10)['支数'].tolist()
 
 selected_spec = st.pills("筛选特定规格：", ["全部 Top10"] + [str(s) for s in sorted(top_10_specs)], default="全部 Top10")
 
-# --- 修复点：确保 groupby 里的列名 '支数' 正确 ---
 spec_data = filtered_df[filtered_df['支数'].isin(top_10_specs)].groupby(['时间轴', '支数'])['销量'].sum().reset_index()
 
 if selected_spec != "全部 Top10":
@@ -105,7 +103,7 @@ for cat in sorted(display_spec_data['支数'].unique()):
         hovertemplate="规格: %{fullData.name}<br>占比: %{y:.1%}<br>销量: %{customdata:,.0f}<extra></extra>"
     ))
 fig_spec_area.update_layout(hovermode="closest", yaxis_tickformat='.0%', height=450)
-st.plotly_chart(fig_spec_area, width='stretch', config={'modeBarButtonsToRemove': ['hoverCompareCartesian']})
+st.plotly_chart(fig_spec_area, width='stretch')
 
 st.markdown("---")
 
@@ -125,7 +123,7 @@ with col_a:
     fig_pie = px.pie(d_price, values='销量', names='价格段', hole=0.4)
     st.plotly_chart(fig_pie, width='stretch')
 with col_b:
-    st.subheader("月度走势")
+    st.subheader("月度走势推移")
     price_trend = d_price.groupby(['时间轴', '价格段'])['销量'].sum().reset_index()
     fig_price_bar = px.bar(price_trend, x='时间轴', y='销量', color='价格段', barmode='group')
     st.plotly_chart(fig_price_bar, width='stretch')
