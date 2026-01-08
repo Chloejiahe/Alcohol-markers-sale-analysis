@@ -125,8 +125,8 @@ fig_spec_area.update_traces(
 
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    hovermode="x unified",
-    yaxis_tickformat='.0%', # 让左侧 Y 轴显示百分比格式
+    hovermode="x",  # 注意：这里不是 "x unified"，也不是 "closest"
+    yaxis_tickformat='.0%', 
     yaxis_title="市场份额占比"
 )
 st.plotly_chart(fig_spec_area, use_container_width=True)
