@@ -93,22 +93,39 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---") # 逻辑分割线
 
-# 第二行：全宽展示【市场份额占比图】
-st.subheader("📊 核心规格市场份额变化 (各规格间的竞争关系)")
-fig_spec_area = px.area(
-    spec_data, 
-    x='时间轴', 
-    y='销量', 
-    color='支数', 
-    groupnorm='percent', 
-    height=500,
-    title="100% 堆叠面积图：观察大规格是否在蚕食小规格份额"
-)
-fig_spec_area.update_layout(xaxis_tickangle=-45)
-st.plotly_chart(fig_spec_area, use_container_width=True)
+with col_spec2:
+    st.subheader("📊 核心规格市场份额变化")
+    st.info("💡 此图展示各规格销量的百分比占比，用于观察市场重心是否向某个规格偏移。")
+    
+    # 重新构建面积图
+    fig_spec_area = px.area(
+        spec_data, 
+        x='时间轴', 
+        y='销量', 
+        color='支数', 
+        groupnorm='percent', 
+        height=500,
+        title="100% 市场份额分布推移",
+        # 关键点：告诉 Plotly 在悬浮窗里包含 '销量' 原始数据
+        hover_data={'销量': ':,.0f'} 
+    )
 
-st.markdown("---")
+    # 深度定制悬浮窗的外观
+    fig_spec_area.update_traces(
+        mode="index", # 鼠标移上去时，显示该时间点所有规格的数据，方便对比
+        hovertemplate="<b>规格: %{fullData.name}</b><br>" + 
+                      "时间: %{x}<br>" + 
+                      "当前占比: %{y:.1%}<br>" + 
+                      "具体销量: %{customdata[0]} 支<extra></extra>"
+    )
 
+    fig_spec_area.update_layout(
+        xaxis_tickangle=-45,
+        hovermode="x unified" # 这一行非常管用，鼠标放上去会有一条垂直线，显示当天所有规格的对比
+    )
+    
+    st.plotly_chart(fig_spec_area, use_container_width=True)
+    
 # --- 板块三：价格段分析 (分行展示优化版) ---
 st.header("3️⃣ 价格段深度分析")
 
