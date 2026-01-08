@@ -114,7 +114,7 @@ for cat in categories:
         x=df_sub['时间轴'],
         y=df_sub['占比'],
         name=str(cat),
-        mode='lines',      # 纯线模式，悬停最灵敏
+        mode='lines',      # 纯线模式，悬停最灵
         stackgroup='one',  # 开启堆叠逻辑，实现面积图效果
         fill='tonexty',    # 填充颜色
         # 传入销量数据
