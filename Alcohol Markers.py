@@ -115,8 +115,10 @@ fig_spec_area = px.area(
     custom_data=['销量'] 
 )
 
-# 第三步：定制悬浮窗，直接引用预算好的数据
+# 第三步：定制悬浮窗
 fig_spec_area.update_traces(
+    # 强制让鼠标只有悬停在当前填充区域（points+fills）时才触发
+    hoveron='points+fills', 
     hovertemplate="<b>规格: %{trace.name}</b><br>" + 
                   "月份: %{x}<br>" + 
                   "市场占比: %{y:.1%}<br>" + 
@@ -125,11 +127,10 @@ fig_spec_area.update_traces(
 
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    hovermode="x",  # 注意：这里不是 "x unified"，也不是 "closest"
+    hovermode="closest", # 配合 hoveron 使用
     yaxis_tickformat='.0%', 
     yaxis_title="市场份额占比"
 )
-st.plotly_chart(fig_spec_area, use_container_width=True)
 
 # --- 板块三：价格段分析 ---
 st.header("3️⃣ 价格段深度分析")
