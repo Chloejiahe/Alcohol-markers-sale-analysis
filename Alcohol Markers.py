@@ -94,47 +94,76 @@ st.markdown("---")
 # --- 2.2 市场份额图 (深度强制单点版) ---
 st.subheader("📊 核心规格市场份额变化")
 
-# 1. 预计算占比 (保持不变)
+# 1. 预计算占比
 total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
 spec_data['占比'] = spec_data['销量'] / total_monthly
 
-# 2. 绘图
-fig_spec_area = px.area(
-    spec_data, 
-    x='时间轴', 
-    y='占比', 
-    color='支数', 
-    height=500,
-    title="100% 市场份额分布推移",
-    custom_data=['销量', '支数']
-)
+# 2. 使用go.Figure替代px.area，获得更多控制权
+import plotly.graph_objects as go
 
-# 3. 【核心修复：双重强制】
-# 第一重：遍历所有数据层，强制设置 hoverinfo
-for trace in fig_spec_area.data:
-    trace.hoveron = 'points'  # 只允许在点上触发，去掉fills
-    trace.hoverinfo = 'text'  # 只显示文本
+fig_spec_area = go.Figure()
 
-# 第二重：更新交互模板
-fig_spec_area.update_traces(
-    hovertemplate="<b>规格: %{customdata[1]} 支</b><br>" + 
-                  "当前份额: %{y:.1%}<br>" + 
-                  "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
-)
+# 为每个支数单独添加trace，确保独立控制
+for 支数 in spec_data['支数'].unique():
+    df_subset = spec_data[spec_data['支数'] == 支数]
+    
+    fig_spec_area.add_trace(go.Scatter(
+        x=df_subset['时间轴'],
+        y=df_subset['占比'],
+        mode='lines',
+        name=f"{支数}支",
+        stackgroup='one',
+        groupnorm='percent',
+        line=dict(width=0.5),
+        hoverinfo='text',
+        hovertext=[f"规格: {支数}支<br>当前份额: {pct:.1%}<br>具体销量: {sales:,.0f}支" 
+                   for pct, sales in zip(df_subset['占比'], df_subset['销量'])],
+        fill='tonexty'
+    ))
 
-# 4. 强制 Layout 设置
+# 3. 关键布局设置
 fig_spec_area.update_layout(
-    hovermode="closest",      # 强制单点
-    hoverdistance=10,         # 缩小悬停触发距离，默认20，越小越需要接近点
-    clickmode="event+select", # 进一步锁定点击行为
+    title="100% 市场份额分布推移",
+    height=500,
+    hovermode='closest',  # 确保只显示最近的点
+    hoverdistance=100,    # 设置悬停距离
+    spikedistance=-1,     # 禁用spike距离
+    showlegend=True,
     xaxis=dict(
-        showspikes=False,     # 必须关闭虚线
-        spikemode="toaxis",
-        # 确保 X 轴不会因为 hover 产生交互线
-        hoverformat=None      
+        title='时间轴',
+        showspikes=False,
+        spikemode='across',
+        spikesnap='cursor',
+        spikedash='solid'
     ),
-    yaxis_tickformat='.0%',
-    hoverlabel=dict(namelength=0)
+    yaxis=dict(
+        title='市场份额',
+        tickformat='.0%',
+        range=[0, 1]
+    )
+)
+
+# 4. 禁用所有可能干扰hover的功能
+fig_spec_area.update_traces(
+    hoveron='points',  # 只在点上触发
+    selector=dict(type='scatter')
+)
+
+# 5. 显示图表
+st.plotly_chart(
+    fig_spec_area, 
+    use_container_width=True,
+    config={
+        'modeBarButtonsToRemove': [
+            'hoverCompareCartesian', 
+            'hoverClosestCartesian',
+            'toggleSpikelines',
+            'lasso2d',
+            'select2d'
+        ],
+        'displaylogo': False,
+        'displayModeBar': True
+    }
 )
 
 # --- 板块三：价格段分析 ---
