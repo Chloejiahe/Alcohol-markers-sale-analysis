@@ -4,7 +4,7 @@ import plotly.express as px
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="酒精笔销量深度看板", layout="wide")
-st.title("📊 酒精笔市场趋势监测看板")
+st.title("📊 酒精笔市场趋势监测看板 (最终修复版)")
 st.markdown("---")
 
 # --- 2. 数据处理 ---
@@ -134,4 +134,20 @@ fig_pie = px.pie(
     color_discrete_sequence=px.colors.qualitative.Pastel
 )
 fig_pie.update_traces(textinfo='percent+label', pull=[0.05]*len(filtered_df['价格段'].unique())) 
-st.plotly_chart(fig_pie, use_container_width=True
+st.plotly_chart(fig_pie, use_container_width=True)
+
+st.markdown("---")
+
+st.subheader("📈 月度价格走势推移")
+price_data = filtered_df.groupby(['时间轴', '价格段'])['销量'].sum().reset_index()
+fig_price = px.bar(
+    price_data, 
+    x='时间轴', 
+    y='销量', 
+    color='价格段', 
+    title="不同价格段的销量波动",
+    barmode='group', 
+    height=500
+)
+fig_price.update_layout(xaxis_tickangle=-45)
+st.plotly_chart(fig_price, use_container_width=True)
