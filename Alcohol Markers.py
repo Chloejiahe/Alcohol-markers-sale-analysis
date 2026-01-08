@@ -32,21 +32,23 @@ df = load_data()
 
 # --- 3. 增强版侧边栏 ---
 st.sidebar.header("🎛️ 全局筛选")
-years = sorted(list(set(df['month(month)'].str[:4])))
-selected_years = st.sidebar.multiselect("1. 选择年份", years, default=years)
+if not df.empty:
+    years = sorted(list(set(df['month(month)'].str[:4])))
+    selected_years = st.sidebar.multiselect("1. 选择年份", years, default=years)
 
-# 核心修改：筛选器增加“全部”逻辑
-age_options = ["全部", "是", "否"]
-selected_age = st.sidebar.selectbox("2. 受众群体 (是否8+)", age_options, index=0)
+    age_options = ["全部", "是", "否"]
+    selected_age = st.sidebar.selectbox("2. 受众群体 (是否8+)", age_options, index=0)
 
-# 执行过滤
-filtered_df = df[df['month(month)'].str[:4].isin(selected_years)]
-if selected_age != "全部":
-    filtered_df = filtered_df[filtered_df['是否8+'] == selected_age]
+    # 执行过滤
+    filtered_df = df[df['month(month)'].str[:4].isin(selected_years)].copy()
+    if selected_age != "全部":
+        filtered_df = filtered_df[filtered_df['是否8+'] == selected_age]
+else:
+    st.stop()
 
 # --- 4. 看板布局 ---
 
-# 板块一：笔尖类型趋势 (分栏对比)
+# 板块一：笔尖类型趋势
 st.header("1️⃣ 笔尖类型：不同市场销量起伏对比")
 if selected_age == "全部":
     col1, col2 = st.columns(2)
@@ -66,7 +68,7 @@ st.markdown("---")
 
 # --- 板块二：规格支数分析 ---
 st.header("2️⃣ 规格支数：核心规格增长分析")
-st.info("💡 系统已自动筛选销量前 10 的规格。现已调整为分行展示，方便您仔细观察每种规格的起伏。")
+st.info("💡 系统已自动筛选销量前 10 的规格。鼠标移至份额图可同时查看具体销量与百分比。")
 
 # 获取前 10 名
 spec_total = filtered_df.groupby('支数')['销量'].sum().sort_values(ascending=False).reset_index()
@@ -80,7 +82,7 @@ fig_spec_line = px.line(
     x='时间轴', 
     y='销量', 
     color='支数', 
-    facet_col='支_num' if '支_num' in spec_data.columns else '支数', 
+    facet_col='支数', 
     facet_col_wrap=2, 
     height=800, 
     title="各规格月度销量波动"
@@ -91,10 +93,8 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---")
 
-# 2.2 市场份额图 (修复了之前的 col_spec2 报错)
+# 2.2 市场份额图 (注意：这里修复了缩进报错)
 st.subheader("📊 核心规格市场份额变化")
-st.info("💡 此图展示各规格销量的百分比占比，用于观察市场重心是否向大规格偏移。")
-
 fig_spec_area = px.area(
     spec_data, 
     x='时间轴', 
@@ -121,36 +121,17 @@ fig_spec_area.update_layout(
 st.plotly_chart(fig_spec_area, use_container_width=True)
 
 st.markdown("---")
-    
-# --- 板块三：价格段分析 (分行展示优化版) ---
+
+# --- 板块三：价格段分析 ---
 st.header("3️⃣ 价格段深度分析")
 
-# 第一行：展示占比饼图
-st.subheader("整体市场价格构成 (所选范围内)")
+st.subheader("📊 整体市场价格构成")
 fig_pie = px.pie(
     filtered_df, 
     values='销量', 
     names='价格段', 
     hole=0.4,
-    color_discrete_sequence=px.colors.qualitative.Pastel # 使用柔和配色
+    color_discrete_sequence=px.colors.qualitative.Pastel
 )
 fig_pie.update_traces(textinfo='percent+label', pull=[0.05]*len(filtered_df['价格段'].unique())) 
-st.plotly_chart(fig_pie, use_container_width=True)
-
-st.markdown("---") # 分割线
-
-# 第二行：展示月度走势条形图
-st.subheader("月度价格走势推移")
-price_data = filtered_df.groupby(['时间轴', '价格段'])['销量'].sum().reset_index()
-fig_price = px.bar(
-    price_data, 
-    x='时间轴', 
-    y='销量', 
-    color='价格段', 
-    title="不同价格段的销量波动 (横向拉长更易观察趋势)",
-    barmode='group', # 改为并列条形图，更容易对比每个月谁最高
-    height=500
-)
-# 优化横轴显示
-fig_price.update_layout(xaxis_tickangle=-45)
-st.plotly_chart(fig_price, use_container_width=True)
+st.plotly_chart(fig_pie, use_container_width=True
