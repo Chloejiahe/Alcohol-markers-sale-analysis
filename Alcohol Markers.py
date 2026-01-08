@@ -91,34 +91,43 @@ st.plotly_chart(fig_spec_line, use_container_width=True)
 
 st.markdown("---")
 
-# 2.2 市场份额图 (核心修复点)
+# --- 2.2 市场份额图 (深度修复数据逻辑版) ---
 st.subheader("📊 核心规格市场份额变化")
+st.info("💡 已修复数据对齐问题。鼠标移至图上可实时对比：**市场占比** 与 **真实销量**。")
+
+# 第一步：手动计算占比，确保数据万无一无
+# 计算每个月总销量
+total_monthly = spec_data.groupby('时间轴')['销量'].transform('sum')
+# 计算占比百分比
+spec_data['占比'] = spec_data['销量'] / total_monthly
+
+# 第二步：绘图 (不再使用 groupnorm='percent'，改用手动计算好的占比)
 fig_spec_area = px.area(
     spec_data, 
     x='时间轴', 
-    y='销量', 
+    y='占比', # 坐标轴改用我们算好的占比
     color='支数', 
-    groupnorm='percent', 
     height=500,
-    title="100% 市场份额分布推移",
-    hover_data={'销量': True} # 引入原始销量数据
+    title="100% 市场份额分布推移 (精确数值版)",
+    # 将原始销量存入 custom_data 供悬浮窗调用
+    custom_data=['销量'] 
 )
 
-# 修复：去掉了非法的 mode="index"
+# 第三步：定制悬浮窗，直接引用预算好的数据
 fig_spec_area.update_traces(
     hovertemplate="<b>规格: %{fullData.name}</b><br>" + 
                   "月份: %{x}<br>" + 
-                  "当前份额: %{y:.1%}<br>" + 
+                  "市场占比: %{y:.1%}<br>" + 
                   "具体销量: %{customdata[0]:,.0f} 支<extra></extra>"
 )
 
 fig_spec_area.update_layout(
     xaxis_tickangle=-45,
-    hovermode="x unified" # 实现垂直线对比所有规格的功能
+    hovermode="x unified",
+    yaxis_tickformat='.0%', # 让左侧 Y 轴显示百分比格式
+    yaxis_title="市场份额占比"
 )
 st.plotly_chart(fig_spec_area, use_container_width=True)
-
-st.markdown("---")
 
 # --- 板块三：价格段分析 ---
 st.header("3️⃣ 价格段深度分析")
