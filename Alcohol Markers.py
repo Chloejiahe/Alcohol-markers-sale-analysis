@@ -76,7 +76,7 @@ st.header("2️⃣ 规格支数：核心规格分析")
 st.info("💡 系统已自动筛选销量前 10 的规格。")
 
 # 图表 1：市场份额变化 (固定显示 Top 10，不受局部按钮影响)
-st.subheader("📊 核心规格市场份额推移 (Top 10)")
+st.subheader("📊 核心规格市场份额推移")
 
 spec_total = filtered_df.groupby('支数')['销量'].sum().sort_values(ascending=False).reset_index()
 
@@ -99,16 +99,22 @@ for cat in sorted(spec_data_all['支数'].unique()):
     df_sub = spec_data_all[spec_data_all['支数'] == cat]
 
     fig_spec_area.add_trace(go.Scatter(
-
-        x=df_sub['时间轴'], y=df_sub['占比'], name=f"{cat}支",
-
-        stackgroup='one', fill='tonexty', hoveron='points',
-
-        customdata=df_sub['销量'],
-
-        hovertemplate="规格: %{fullData.name}<br>占比: %{y:.1%}<br>销量: %{customdata:,.0f}<extra></extra>"
-
-    ))
+    x=df_sub['时间轴'], 
+    y=df_sub['占比'], 
+    name=f"{cat}支",
+    stackgroup='one', 
+    fill='tonexty', 
+    hoveron='points',
+    customdata=df_sub['销量'],
+    # 重点：加入 时间: %{x}
+    hovertemplate=(
+        "时间: %{x}<br>"
+        "规格: %{fullData.name}<br>"
+        "占比: %{y:.1%}<br>"
+        "销量: %{customdata:,.0f}"
+        "<extra></extra>"
+    )
+))
 
 fig_spec_area.update_layout(hovermode="closest", yaxis_tickformat='.0%', height=500)
 
