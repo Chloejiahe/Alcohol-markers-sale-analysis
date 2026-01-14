@@ -233,30 +233,33 @@ with st.expander("💡 如何解读这个矩阵？ (点击展开)"):
         * **孤立小气泡**：定价危险区。单价高且气泡小，可能存在溢价过高或受众过窄的问题。
     """)
     
-# --- 关键修改：过滤出只属于前十规格的数据 ---
-# top_10_specs 是你在板块二中已经定义的变量
+# --- 关键修改：确保数据是干净的数字类型 ---
 biz_df_top10 = biz_df[biz_df['支数'].isin(top_10_specs)].copy()
+# 强制转换支数为整数，防止出现“.0”或乱码标签
+biz_df_top10['支数'] = biz_df_top10['支数'].astype(int)
 
 fig_scatter = px.scatter(
-    biz_df_top10,                # 使用过滤后的数据
-    x='支数', 
+    biz_df_top10,
+    x='支数',               # 确保这里对应的列只有数字
     y='单只价格', 
     size='销量', 
     color='单只价格区间',
-    hover_name='Title', 
+    hover_name='Title',     # 产品标题仅出现在悬停浮窗里，不会跑到坐标轴上
     size_max=45,
-    # 动态标题，显示具体的规格范围
-    title=f"核心规格定价博弈矩阵 (聚焦销量前10规格: {min(top_10_specs)}-{max(top_10_specs)}支)",
-    labels={'单只价格': '单只价格 (USD)', '支数': '规格支数'},
-    # 增加 hover_data 让信息更全
+    title="核心规格定价博弈矩阵", 
+    labels={'单只价格': '单价 (USD)', '支数': '规格 (支数)'},
     hover_data={'支数': True, '单只价格': ':.3f', '销量': True, '单只价格区间': False}
 )
 
-# 保持 Y 轴限制在 0-10，防止异常值干扰
+# --- 关键修正 2：强制 X 轴为线性数字轴 ---
 fig_scatter.update_layout(
-    yaxis_range=[0, 10],
-    xaxis=dict(tickmode='linear'), # 确保 X 轴支数显示更清晰
-    hoverlabel=dict(bgcolor="white", font_size=12)
+    yaxis_range=[0, 15],
+    xaxis=dict(
+        type='linear',      # 强制指定为线性轴，防止 Plotly 把它当成文本轴
+        tickmode='array',   # 指定只显示我们想要的刻度
+        tickvals=sorted(top_10_specs), # 只在有数据的支数位置显示刻度
+        title_font=dict(size=14)
+    )
 )
 
 st.plotly_chart(fig_scatter, use_container_width=True)
