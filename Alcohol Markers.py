@@ -233,38 +233,66 @@ with st.expander("💡 如何解读这个矩阵？ (点击展开)"):
         * **孤立小气泡**：定价危险区。单价高且气泡小，可能存在溢价过高或受众过窄的问题。
     """)
     
-# 1. 数据深度清洗：确保支数为纯数字
-biz_df_top10 = biz_df[biz_df['支数'].isin(top_10_specs)].copy()
-# 强制转换为数字，防止 X 轴出现乱码
-biz_df_top10['支数'] = pd.to_numeric(biz_df_top10['支数'], errors='coerce').fillna(0).astype(int)
+# --- 核心规格定价博弈矩阵 ---
 
-# 2. 聚合销量：按产品和定价聚合
-biz_df_agg = biz_df_top10.groupby(
+st.subheader("🔍 Top 10 规格竞争力定价矩阵")
+
+
+
+# 1. 业务逻辑解析卡片
+
+with st.expander("💡 如何解读这个矩阵？ (点击展开)"):
+
+    st.markdown("""
+
+    * **横轴 (X轴) - 规格支数**：反映了市场上最主流的 10 种产品规格。
+
+    * **纵轴 (Y轴) - 单只价格**：反映了产品的溢价能力。纵向分布越广，说明该规格下的品牌差异化越大。
+
+    * **气泡大小 - 销量**：气泡越大，代表该定价策略下的市场接受度越高。
+
+    * **核心逻辑**：
+
+        * **左下角气泡**：极致性价比区。靠超低单价获取海量市场份额。
+
+        * **中上部气泡**：品牌/品质区。即便单价较高，若气泡依然巨大，说明该品牌拥有极强的护城河。
+
+        * **孤立小气泡**：定价危险区。单价高且气泡小，可能存在溢价过高或受众过窄的问题。
+
+    """)
+
+    
+
+# --- 修正步骤：按产品和价格聚合年度总销量 ---
+
+# 1. 筛选数据并确保支数为整数
+biz_df_top10 = biz_df[biz_df['支数'].isin(top_10_specs)].copy()
+biz_df_top10['支数'] = biz_df_top10['支数'].astype(int)
+
+# 2. 【关键】按照 Title、支数、价格进行聚合，将销量求和
+# 这样无论你侧边栏选了 1 年还是 2 年，气泡大小都代表该时段内的总销量
+biz_df_annual = biz_df_top10.groupby(
     ['Title', '支数', '单只价格', '单只价格区间'], 
     observed=False
-).agg({
-    '销量': 'sum' 
-}).reset_index()
+)['销量'].sum().reset_index()
 
-# 3. 绘图配置
+# 3. 使用聚合后的 biz_df_annual 绘图
 fig_scatter = px.scatter(
-    biz_df_agg,
+    biz_df_annual,               # 数据源改为聚合后的结果
     x='支数', 
     y='单只价格', 
-    size='销量', 
+    size='销量',                 # 此时 size 代表年度累计总销量
     color='单只价格区间',
     hover_name='Title', 
-    size_max=55,
-    title=f"核心规格：累计销量表现分布", 
-    labels={'单只价格': '单笔均价 (USD)', '支数': '规格 (支数)', '销量': '累计销量'},
-    hover_data={'支数': True, '单只价格': ':.3f', '销量': ':,.0f', '单只价格区间': False}
+    size_max=55,                # 销量总和后数值较大，可适当调大 size_max 增加视觉对比
+    title="核心规格：产品年度累计销量博弈矩阵", 
+    labels={'单只价格': '单价 (USD)', '支数': '规格 (支数)', '销量': '年度总销量'},
+    hover_data={'支数': True, '单只价格': ':.3f', '销量': ':,.0f'} # 显示带千分位的总销量
 )
 
-# 4. 解决 X 轴乱码的关键布局设置
+# --- 布局优化保持不变 ---
 fig_scatter.update_layout(
     yaxis_range=[0, 8],
-    hovermode='closest',
-    # 强制 X 轴为线性数字轴，不再受文本标签干扰
     xaxis=dict(
         type='linear',
         tickmode='array',
@@ -273,5 +301,5 @@ fig_scatter.update_layout(
     )
 )
 
-# 5. 适配最新 Streamlit 参数
-st.plotly_chart(fig_scatter, width="stretch")
+# 根据你的 2026 版本日志，建议将参数修改为 width='stretch'
+st.plotly_chart(fig_scatter, width='stretch')
