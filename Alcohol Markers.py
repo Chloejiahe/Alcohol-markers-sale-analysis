@@ -16,12 +16,36 @@ def load_data():
     try:
         df = pd.read_excel(file_path, engine='openpyxl')
         df.columns = [c.strip() for c in df.columns] 
+        
+        # --- 【关键步骤】单只价格深度清洗与区间定义 ---
+        # 1. 强制转为数字，无法转换的变为 NaN
+        df['单只价格'] = pd.to_numeric(df['单只价格'], errors='coerce')
+        
+        # 2. 物理剔除负数和 0 (这是你指出的核心步骤，确保分析纯净)
+        df = df[df['单只价格'] > 0].copy() 
+        
+        # 3. 按照您的 7 级业务逻辑划分区间
+        bins = [0, 0.25, 0.5, 1.0, 2.0, 4.0, 6.0, float('inf')]
+        labels = [
+            '1. 超低价走量款 (≤0.25)', 
+            '2. 大众平价款 (0.25-0.5]', 
+            '3. 标准办公款 (0.5-1.0]', 
+            '4. 品质进阶款 (1.0-2.0]', 
+            '5. 中端功能款 (2.0-4.0]', 
+            '6. 中高端款 (4.0-6.0]', 
+            '7. 高端/奢侈款 (>6.0)'
+        ]
+        df['单只价格区间'] = pd.cut(df['单只价格'], bins=bins, labels=labels)
+        # --------------------------------------------
+
         df['month(month)'] = df['month(month)'].astype(str)
         df = df.sort_values('month(month)')
         df['时间轴'] = df['month(month)'].apply(lambda x: f"{x[:4]}-{x[4:]}")
         df['是否8+'] = df['是否8+'].fillna('否')
+        
         if '目标分类' in df.columns:
             df = df[df['目标分类'] == '酒精笔']
+            
         return df
     except Exception as e:
         st.error(f"数据加载出错: {e}")
@@ -153,3 +177,55 @@ if selected_prices:
     st.plotly_chart(fig_price_bar, use_container_width=True)
 else:
     st.info("请在上方选择价格段以对比走势。")
+
+# --- 板块四：单只价格精细分析 (最新业务逻辑) ---
+st.header("4️⃣ 业务定价区间分布 (基于单只价格)")
+
+# 过滤异常数据（只看单价大于0的）
+biz_df = filtered_df[filtered_df['单只价格'] > 0].copy()
+
+tab_dist, tab_trend = st.tabs(["📊 销量占比分布", "📈 市场趋势推移"])
+
+with tab_dist:
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("🎯 业务定价区间销量对比")
+        # 柱状图：展示各区间总销量
+        price_dist_fig = px.bar(
+            biz_df.groupby('单只价格区间', observed=False)['销量'].sum().reset_index(),
+            x='单只价格区间', y='销量', 
+            color='单只价格区间',
+            text_auto='.2s',
+            title="哪个定价带最能出单？"
+        )
+        st.plotly_chart(price_dist_fig, use_container_width=True)
+    
+    with col_b:
+        st.subheader("💰 定价区间市场份额")
+        # 饼图：展示各区间份额占比
+        fig_pie_biz = px.pie(
+            biz_df, values='销量', names='单只价格区间', 
+            hole=0.4, title="7级定价带销量占比"
+        )
+        st.plotly_chart(fig_pie_biz, use_container_width=True)
+
+with tab_trend:
+    st.subheader("⏳ 各业务区间月度销量走势")
+    # 观察低价走量款与品质款的市场热度切换
+    biz_trend_data = biz_df.groupby(['时间轴', '单只价格区间'], observed=False)['销量'].sum().reset_index()
+    fig_biz_trend = px.line(biz_trend_data, x='时间轴', y='销量', color='单只价格区间', markers=True)
+    st.plotly_chart(fig_biz_trend, use_container_width=True)
+
+st.markdown("---")
+st.subheader("🔍 支数规格 x 单价 x 销量矩阵")
+st.info("💡 气泡大小代表销量。通过此图分析不同规格（如80支、120支）在各单价区间的溢价表现。")
+fig_scatter = px.scatter(
+    biz_df, x='支数', y='单只价格', size='销量', color='单只价格区间',
+    hover_name='Title', size_max=45,
+    title="单笔定价博弈矩阵 (Y轴限制在0-10美元以查看核心区)",
+    labels={'单只价格': '单只价格 (USD)', '支数': '规格支数'}
+)
+fig_scatter.update_layout(yaxis_range=[0, 10]) # 限制视野防止长尾拉扁图表
+st.plotly_chart(fig_scatter, use_container_width=True)
+
+st.success("✅ 看板已根据 7 级业务定价逻辑更新完毕。")
