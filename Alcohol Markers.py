@@ -235,48 +235,59 @@ with st.expander("💡 如何解读这个矩阵？ (点击展开)"):
         * **孤立小气泡**：定价危险区。单价高且气泡小，可能存在溢价过高或受众过窄的问题。
     """)
     
-# --- 核心规格定价博弈矩阵 ---
+# --- 关键修复步骤 ---
 
-st.subheader("🔍 Top 10 规格竞争力定价矩阵")
+# A. 彻底清洗数据：剔除非数字(--)和非正数
+# 先确保单只价格是纯净的数字
+clean_biz_df = filtered_df.copy()
+clean_biz_df['单只价格'] = pd.to_numeric(clean_biz_df['单只价格'], errors='coerce')
+clean_biz_df = clean_biz_df[clean_biz_df['单只价格'].notna() & (clean_biz_df['单只价格'] > 0)]
 
+# B. 确保支数也是纯净的数字
+clean_biz_df['支数'] = pd.to_numeric(clean_biz_df['支数'], errors='coerce').fillna(0).astype(int)
 
-# --- 修正步骤：按产品和价格聚合年度总销量 ---
+# C. 筛选 Top 10 规格
+if 'top_10_specs' in locals() and len(top_10_specs) > 0:
+    biz_df_top10 = clean_biz_df[clean_biz_df['支数'].isin(top_10_specs)].copy()
+    
+    # D. 聚合年度总销量 (确保数据量精简，加快加载速度)
+    biz_df_annual = biz_df_top10.groupby(
+        ['Title', '支数', '单只价格', '单只价格区间'], 
+        observed=False
+    )['销量'].sum().reset_index()
 
-# 1. 筛选数据并确保支数为整数
-biz_df_top10 = biz_df[biz_df['支数'].isin(top_10_specs)].copy()
-biz_df_top10['支数'] = biz_df_top10['支数'].astype(int)
+    if not biz_df_annual.empty:
+        # 2. 绘图
+        fig_scatter = px.scatter(
+            biz_df_annual,
+            x='支数', 
+            y='单只价格', 
+            size='销量', 
+            color='单只价格区间',
+            hover_name='Title', 
+            size_max=50,
+            title="核心规格：年度累计销量博弈矩阵", 
+            labels={'单只价格': '单价 (USD)', '支数': '规格 (支数)', '销量': '年度总销量'},
+            hover_data={'支数': True, '单只价格': ':.3f', '销量': ':,.0f'}
+        )
 
-# 2. 【关键】按照 Title、支数、价格进行聚合，将销量求和
-# 这样无论你侧边栏选了 1 年还是 2 年，气泡大小都代表该时段内的总销量
-biz_df_annual = biz_df_top10.groupby(
-    ['Title', '支数', '单只价格', '单只价格区间'], 
-    observed=False
-)['销量'].sum().reset_index()
+        # 3. 布局优化：强制数字轴，解决乱码
+        fig_scatter.update_layout(
+            yaxis_range=[0, 8],
+            hovermode='closest',
+            xaxis=dict(
+                type='linear',
+                tickmode='array',
+                tickvals=sorted(top_10_specs),
+                title_font=dict(size=14)
+            )
+        )
 
-# 3. 使用聚合后的 biz_df_annual 绘图
-fig_scatter = px.scatter(
-    biz_df_annual,               # 数据源改为聚合后的结果
-    x='支数', 
-    y='单只价格', 
-    size='销量',                 # 此时 size 代表年度累计总销量
-    color='单只价格区间',
-    hover_name='Title', 
-    size_max=55,                # 销量总和后数值较大，可适当调大 size_max 增加视觉对比
-    title="核心规格：产品年度累计销量博弈矩阵", 
-    labels={'单只价格': '单价 (USD)', '支数': '规格 (支数)', '销量': '年度总销量'},
-    hover_data={'支数': True, '单只价格': ':.3f', '销量': ':,.0f'} # 显示带千分位的总销量
-)
+        # 4. 适配 2026 版本参数
+        st.plotly_chart(fig_scatter, width='stretch')
+    else:
+        st.warning("⚠️ 当前筛选条件下没有符合要求的有效数据。")
+else:
+    st.error("❌ 无法获取 Top 10 规格列表，请检查数据源或年份筛选。")
 
-# --- 布局优化保持不变 ---
-fig_scatter.update_layout(
-    yaxis_range=[0, 8],
-    xaxis=dict(
-        type='linear',
-        tickmode='array',
-        tickvals=sorted(top_10_specs),
-        title_font=dict(size=14)
-    )
-)
-
-# 根据你的 2026 版本日志，建议将参数修改为 width='stretch'
-st.plotly_chart(fig_scatter, width='stretch')
+st.markdown("---")
