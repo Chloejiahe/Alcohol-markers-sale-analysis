@@ -233,31 +233,42 @@ with st.expander("💡 如何解读这个矩阵？ (点击展开)"):
         * **孤立小气泡**：定价危险区。单价高且气泡小，可能存在溢价过高或受众过窄的问题。
     """)
     
-# --- 关键修改：确保数据是干净的数字类型 ---
+# 1. 筛选前十规格数据
 biz_df_top10 = biz_df[biz_df['支数'].isin(top_10_specs)].copy()
-# 强制转换支数为整数，防止出现“.0”或乱码标签
 biz_df_top10['支数'] = biz_df_top10['支数'].astype(int)
 
+# --- 【关键步骤】按产品和定价聚合销量 ---
+# 这样会将选定年份内，同一个产品在相同单价下的销量全部求和
+biz_df_agg = biz_df_top10.groupby(
+    ['Title', '支数', '单只价格', '单只价格区间'], 
+    observed=False
+).agg({
+    '销量': 'sum'  # 这里将销量求和，气泡大小将代表总销量
+}).reset_index()
+
+# 2. 绘图：使用聚合后的数据 biz_df_agg
 fig_scatter = px.scatter(
-    biz_df_top10,
-    x='支数',               # 确保这里对应的列只有数字
+    biz_df_agg,               # 使用聚合后的数据
+    x='支数', 
     y='单只价格', 
-    size='销量', 
+    size='销量',               # 此时 size 代表选定年份的总销量
     color='单只价格区间',
-    hover_name='Title',     # 产品标题仅出现在悬停浮窗里，不会跑到坐标轴上
-    size_max=45,
-    title="核心规格定价博弈矩阵", 
-    labels={'单只价格': '单价 (USD)', '支数': '规格 (支数)'},
-    hover_data={'支数': True, '单只价格': ':.3f', '销量': True, '单只价格区间': False}
+    hover_name='Title', 
+    size_max=55,              # 聚合后数值变大，适当调大 max_size 让对比更明显
+    title=f"核心规格定价博弈矩阵 (累计销量展示)", 
+    labels={'单只价格': '单笔均价 (USD)', '支数': '规格 (支数)', '销量': '累计销量'},
+    # hover_data 中，销量显示为整数并带千分位
+    hover_data={'支数': True, '单只价格': ':.3f', '销量': ':,.0f', '单只价格区间': False}
 )
 
-# --- 关键修正 2：强制 X 轴为线性数字轴 ---
+# 3. 布局优化
 fig_scatter.update_layout(
     yaxis_range=[0, 8],
+    hovermode='closest',
     xaxis=dict(
-        type='linear',      # 强制指定为线性轴，防止 Plotly 把它当成文本轴
-        tickmode='array',   # 指定只显示我们想要的刻度
-        tickvals=sorted(top_10_specs), # 只在有数据的支数位置显示刻度
+        type='linear',
+        tickmode='array',
+        tickvals=sorted(top_10_specs),
         title_font=dict(size=14)
     )
 )
