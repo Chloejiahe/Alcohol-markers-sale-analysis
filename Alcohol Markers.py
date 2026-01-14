@@ -253,7 +253,7 @@ fig_scatter = px.scatter(
 
 # --- 关键修正 2：强制 X 轴为线性数字轴 ---
 fig_scatter.update_layout(
-    yaxis_range=[0, 15],
+    yaxis_range=[0, 8],
     xaxis=dict(
         type='linear',      # 强制指定为线性轴，防止 Plotly 把它当成文本轴
         tickmode='array',   # 指定只显示我们想要的刻度
