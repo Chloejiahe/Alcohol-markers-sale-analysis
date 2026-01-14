@@ -233,38 +233,38 @@ with st.expander("💡 如何解读这个矩阵？ (点击展开)"):
         * **孤立小气泡**：定价危险区。单价高且气泡小，可能存在溢价过高或受众过窄的问题。
     """)
     
-# 1. 筛选前十规格数据
+# 1. 数据深度清洗：确保支数为纯数字
 biz_df_top10 = biz_df[biz_df['支数'].isin(top_10_specs)].copy()
-biz_df_top10['支数'] = biz_df_top10['支数'].astype(int)
+# 强制转换为数字，防止 X 轴出现乱码
+biz_df_top10['支数'] = pd.to_numeric(biz_df_top10['支数'], errors='coerce').fillna(0).astype(int)
 
-# --- 【关键步骤】按产品和定价聚合销量 ---
-# 这样会将选定年份内，同一个产品在相同单价下的销量全部求和
+# 2. 聚合销量：按产品和定价聚合
 biz_df_agg = biz_df_top10.groupby(
     ['Title', '支数', '单只价格', '单只价格区间'], 
     observed=False
 ).agg({
-    '销量': 'sum'  # 这里将销量求和，气泡大小将代表总销量
+    '销量': 'sum' 
 }).reset_index()
 
-# 2. 绘图：使用聚合后的数据 biz_df_agg
+# 3. 绘图配置
 fig_scatter = px.scatter(
-    biz_df_agg,               # 使用聚合后的数据
+    biz_df_agg,
     x='支数', 
     y='单只价格', 
-    size='销量',               # 此时 size 代表选定年份的总销量
+    size='销量', 
     color='单只价格区间',
     hover_name='Title', 
-    size_max=55,              # 聚合后数值变大，适当调大 max_size 让对比更明显
-    title=f"核心规格定价博弈矩阵 (累计销量展示)", 
+    size_max=55,
+    title=f"核心规格：累计销量表现分布", 
     labels={'单只价格': '单笔均价 (USD)', '支数': '规格 (支数)', '销量': '累计销量'},
-    # hover_data 中，销量显示为整数并带千分位
     hover_data={'支数': True, '单只价格': ':.3f', '销量': ':,.0f', '单只价格区间': False}
 )
 
-# 3. 布局优化
+# 4. 解决 X 轴乱码的关键布局设置
 fig_scatter.update_layout(
     yaxis_range=[0, 8],
     hovermode='closest',
+    # 强制 X 轴为线性数字轴，不再受文本标签干扰
     xaxis=dict(
         type='linear',
         tickmode='array',
@@ -273,4 +273,5 @@ fig_scatter.update_layout(
     )
 )
 
-st.plotly_chart(fig_scatter, use_container_width=True)
+# 5. 适配最新 Streamlit 参数
+st.plotly_chart(fig_scatter, width="stretch")
