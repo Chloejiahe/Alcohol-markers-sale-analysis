@@ -254,7 +254,7 @@ strat_df['市场份额'] = strat_df['销量'] / strat_df['销量'].sum()
 total_delta = strat_df['销量'].sum() - strat_df['去年销量'].sum()
 strat_df['增长贡献率'] = (strat_df['销量'] - strat_df['去年销量']) / (total_delta if total_delta != 0 else 1)
 
-# 5. 绘图 (其余代码保持一致)
+# 5. 绘图 (增强颜色对比度版)
 fig_strat = px.scatter(
     strat_df[strat_df['销量'] > 30], 
     x='市场份额',
@@ -263,14 +263,23 @@ fig_strat = px.scatter(
     color='增长贡献率',
     facet_col='笔头类型',
     hover_name='支数',
-    color_continuous_scale='RdBu_r', 
-    color_continuous_midpoint=0, # 增加：确保 0 是颜色中性点
+    # 使用 RdBu_r: 红色代表负增长(后退)，蓝色代表正增长
+    color_continuous_scale='RdBu', 
+    # 重点 1: 确保 0 是白色的中性点
+    color_continuous_midpoint=0, 
+    # 重点 2: 压缩颜色映射范围。
+    # 这样即使贡献率只有 0.05 (5%)，也会显示出较深的蓝色，而不是淡淡的灰色。
+    range_color=[-0.1, 0.1], 
     title=f"战略定位：{latest_year}年 蓝海机会识别 (对比 {prev_year}年)",
-    labels={'市场份额': '市场份额 (重要性)', '同比增长率': '年度同比增长 (活跃度)'},
+    labels={'市场份额': '市场份额 (重要性)', '同比增长率': '年度同比增长 (活跃度)', '增长贡献率': '增长贡献'},
     height=500,
     template="plotly_white"
 )
-fig_strat.add_hline(y=0, line_dash="dash", line_color="gray")
+
+# 优化视觉：增加网格线对比
+fig_strat.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.3)
+fig_strat.update_layout(coloraxis_colorbar=dict(title="增长贡献(深蓝为优)"))
+
 st.plotly_chart(fig_strat, use_container_width=True)
 
 st.info(f"💡 **解读提示**：当前对比基准为 {latest_year} vs {prev_year}。优先关注左上角高增长细分。")
