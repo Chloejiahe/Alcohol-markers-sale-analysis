@@ -296,25 +296,31 @@ st.sidebar.success("✅ 数据已实时更新至最新月份")
 
 st.header("5️⃣ 三维度深度交叉：规格 x 价格 x 笔尖")
 
-# 聚合数据
-triple_data = biz_df.groupby(['支数', '笔头类型', '价格段'], observed=False).agg({
-    '销量': 'sum',
-    '价格段': 'mean'
-}).reset_index()
+if not biz_df.empty:
+    # 1. 聚合数据 (确保使用数值列进行 mean 计算)
+    triple_data = biz_df.groupby(['支数', '笔头类型', '单只价格区间'], observed=False).agg({
+        '销量': 'sum',
+        '单只价格': 'mean' 
+    }).reset_index()
+    
+    triple_data = triple_data[triple_data['销量'] > 0]
+    
+    # 2. 绘图：实现三维度交叉比较
+    fig_triple = px.scatter(
+        triple_data,
+        x='支数',
+        y='单只价格',
+        size='销量',
+        color='单只价格区间', # 维度1：定价策略
+        facet_col='笔头类型', # 维度2：产品形态 (分栏显示)
+        title="儿童酒精笔配置博弈矩阵 (规格 x 单价 x 笔尖)",
+        labels={'支数': '包装规格(支)', '单只价格': '平均单支单价(元)'},
+        height=600,
+        size_max=40,
+        template="plotly_white"
+    )
 
-# 绘制分面气泡图
-fig_triple = px.scatter(
-    triple_data,
-    x='支数',
-    y='单只价格',
-    size='销量',
-    color='价格段',
-    facet_col='笔头类型', # 第三维度：分栏显示
-    title="三维度博弈矩阵：规格 vs 定价 (按笔尖类型拆解)",
-    labels={'支数': '规格(支)', '单只价格': '单只均价(元)'},
-    height=600,
-    size_max=40
-)
-
-# 优化布局，使横坐标更清晰
-fig_triple.update_xaxes(tickmode='linear')
+    # 3. 渲染图表
+    st.plotly_chart(fig_triple, use_container_width=True)
+else:
+    st.warning("数据源为空，请检查筛选条件。")
