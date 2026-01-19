@@ -291,3 +291,30 @@ st.plotly_chart(fig_matrix, use_container_width=True)
 st.sidebar.markdown("---")
 st.sidebar.info(f"📊 当前分析样本量：{len(filtered_df):,} 条数据")
 st.sidebar.success("✅ 数据已实时更新至最新月份")
+
+
+
+st.header("5️⃣ 三维度深度交叉：规格 x 价格 x 笔尖")
+
+# 聚合数据
+triple_data = biz_df.groupby(['支数', '笔头类型', '单只价格区间'], observed=False).agg({
+    '销量': 'sum',
+    '单只价格': 'mean'
+}).reset_index()
+
+# 绘制分面气泡图
+fig_triple = px.scatter(
+    triple_data,
+    x='支数',
+    y='单只价格',
+    size='销量',
+    color='单只价格区间',
+    facet_col='笔头类型', # 第三维度：分栏显示
+    title="三维度博弈矩阵：规格 vs 定价 (按笔尖类型拆解)",
+    labels={'支数': '规格(支)', '单只价格': '单只均价(元)'},
+    height=600,
+    size_max=40
+)
+
+# 优化布局，使横坐标更清晰
+fig_triple.update_xaxes(tickmode='linear')
