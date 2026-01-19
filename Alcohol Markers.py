@@ -224,26 +224,39 @@ st.markdown("---")
 st.markdown("---")
 st.header("🚀 战略定位：细分蓝海机会识别")
 
-# 数据准备：计算同比增长 (YoY)
-df['year'] = df['month(month)'].astype(str).str[:4].astype(int)
-latest_year = df['year'].max()
+# 注意：这里直接用原始 df 提取年份，不被侧边栏的 year 筛选干扰
+df['year_int'] = df['month(month)'].astype(str).str[:4].astype(int)
+
+# 1. 自动定义“今年”和“去年”
+# 即使侧边栏选了多年，我们也以其中最新的一年为基准进行蓝海分析
+latest_year = df['year_int'].max() 
 prev_year = latest_year - 1
 
-# 分组聚合今年和去年数据
-current_growth = filtered_df[filtered_df['year'] == latest_year].groupby(['支数', '笔头类型']).agg({'销量': 'sum', '销售额': 'sum'}).reset_index()
-prev_growth = filtered_df[filtered_df['year'] == prev_year].groupby(['支数', '笔头类型']).agg({'销量': 'sum'}).rename(columns={'销量': '去年销量'}).reset_index()
+# 2. 为了保证人群筛选一致（如只看“否8+”），我们基于原始 df 做人群过滤，但不过滤年份
+age_val = selected_age # 获取侧边栏的 radio 值
+if age_val != "全部":
+    base_calc_df = df[df['是否8+'] == age_val].copy()
+else:
+    base_calc_df = df.copy()
 
-# 合并计算
+# 3. 分组聚合今年和去年数据 (从 base_calc_df 中拿)
+current_growth = base_calc_df[base_calc_df['year_int'] == latest_year].groupby(['支数', '笔头类型']).agg({'销量': 'sum', '销售额': 'sum'}).reset_index()
+prev_growth = base_calc_df[base_calc_df['year_int'] == prev_year].groupby(['支数', '笔头类型']).agg({'销量': 'sum'}).rename(columns={'销量': '去年销量'}).reset_index()
+
+# 4. 合并计算
 strat_df = pd.merge(current_growth, prev_growth, on=['支数', '笔头类型'], how='left').fillna(0)
+
+# 防止除以 0 的逻辑优化
 strat_df['同比增长率'] = (strat_df['销量'] - strat_df['去年销量']) / strat_df['去年销量'].replace(0, np.nan)
 strat_df['市场份额'] = strat_df['销量'] / strat_df['销量'].sum()
-# 增长贡献率 = 该细分增量 / 市场总增量
+
+# 增长贡献率逻辑保持
 total_delta = strat_df['销量'].sum() - strat_df['去年销量'].sum()
 strat_df['增长贡献率'] = (strat_df['销量'] - strat_df['去年销量']) / (total_delta if total_delta != 0 else 1)
 
-# 绘图：战略定位气泡图
+# 5. 绘图 (其余代码保持一致)
 fig_strat = px.scatter(
-    strat_df[strat_df['销量'] > 30], # 过滤掉样本量过小的杂讯
+    strat_df[strat_df['销量'] > 30], 
     x='市场份额',
     y='同比增长率',
     size='销量',
@@ -251,7 +264,8 @@ fig_strat = px.scatter(
     facet_col='笔头类型',
     hover_name='支数',
     color_continuous_scale='RdBu_r', 
-    title="第一层：寻找蓝海 (X轴:份额 | Y轴:增速 | 颜色:增长贡献)",
+    color_continuous_midpoint=0, # 增加：确保 0 是颜色中性点
+    title=f"战略定位：{latest_year}年 蓝海机会识别 (对比 {prev_year}年)",
     labels={'市场份额': '市场份额 (重要性)', '同比增长率': '年度同比增长 (活跃度)'},
     height=500,
     template="plotly_white"
@@ -259,7 +273,7 @@ fig_strat = px.scatter(
 fig_strat.add_hline(y=0, line_dash="dash", line_color="gray")
 st.plotly_chart(fig_strat, use_container_width=True)
 
-st.info("💡 **操作指南**：优先寻找左上角（份额小但增速快）且颜色偏蓝（贡献大）的气泡，那是新兴蓝海。")
+st.info(f"💡 **解读提示**：当前对比基准为 {latest_year} vs {prev_year}。优先关注左上角高增长细分。")
 
 # --- 2. 深度配置定义：三维度交叉分析 ---
 st.markdown("---")
