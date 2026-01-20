@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+import statsmodels.api as sm
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="酒精笔销量深度看板", layout="wide")
@@ -338,4 +339,102 @@ if not biz_df.empty:
     st.plotly_chart(fig_triple, use_container_width=True)
 else:
     st.warning("当前筛选条件下无可用数据。")
+
+
+
+# --- 5. 产品矩阵分析：基于 ASIN (唯一商品) 维度 ---
+st.markdown("---")
+st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
+
+# --- 【新增】定义新品列表 ---
+new_asin_list = [
+    "B0FCS8ZWQB", "B0FKLR5YCB", "B0FCS6M53X", "B0FGHQCR1C", "B0FL2FVWRS",
+    "B0FL2KGB6Q", "B0FD34KW2Z", "B0FMYFW6Q9", "B0FNW7NYZ5", "B0FM3Q1R6V",
+    "B0FM83L163", "B0FH1JBW5T", "B0FDLC8MJ6", "B0FP2YV4ZZ", "B0FPDZ7VYM",
+    "B0F91WRVHF", "B0FL78FF2F", "B0FKMB9LVM", "B0FKGPNWMN", "B0FKN1JBXR"
+]
+
+# 1. 基础数据准备
+id_col = 'ASIN' if 'ASIN' in biz_df.columns else '商品编码' 
+
+if id_col in biz_df.columns:
+    matrix_base = biz_df.copy()
+    matrix_base['month_dt'] = pd.to_datetime(matrix_base['month(month)'])
+    
+    # 2. 定义稳健回归函数
+    def calculate_robust_trend(group):
+        if len(group) < 3: return 0.0
+        y = group.sort_values('month_dt')['销量'].values
+        x = np.arange(len(y))
+        x = sm.add_constant(x)
+        try:
+            model = sm.RLM(y, x, M=sm.robust.norms.HuberT())
+            results = model.fit()
+            return results.params[1]
+        except:
+            return 0.0
+
+    # 3. 计算指标
+    latest_m = matrix_base['month_dt'].max()
+    recent_12m_df = matrix_base[matrix_base['month_dt'] > (latest_m - pd.DateOffset(months=12))]
+
+    asin_stats = recent_12m_df.groupby(id_col).agg({
+        '销量': 'median',
+        '支数': 'first',
+        '笔头类型': 'first'
+    }).rename(columns={'销量': '销售中位数'}).reset_index()
+
+    asin_trends = recent_12m_df.groupby(id_col).apply(calculate_robust_trend).reset_index()
+    asin_trends.columns = [id_col, '趋势得分']
+
+    # 4. 合并并打标签
+    plot_matrix = pd.merge(asin_stats, asin_trends, on=id_col)
+    y_baseline = plot_matrix['销售中位数'].median()
+    
+    # --- 【修改】标签判定逻辑：优先判定是否为新品 ---
+    def get_status(row):
+        if row[id_col] in new_asin_list:
+            return '🔺 新品 (New)'
+        if row['趋势得分'] > 0 and row['销售中位数'] > y_baseline:
+            return '🔥 动态产品 (高爆发)'
+        return '🧊 稳定产品 (基本盘)'
+
+    plot_matrix['产品状态'] = plot_matrix.apply(get_status, axis=1)
+
+    # 5. 绘图
+    fig_matrix = px.scatter(
+        plot_matrix,
+        x='趋势得分',
+        y='销售中位数',
+        color='产品状态',
+        symbol='产品状态', # 为新品增加形状区分（可选）
+        size='销售中位数',
+        hover_name=id_col,
+        hover_data=['支数', '笔头类型'],
+        # --- 【修改】配色方案，增加新品的红色 ---
+        color_discrete_map={
+            '🔥 动态产品 (高爆发)': '#636EFA', 
+            '🧊 稳定产品 (基本盘)': '#FECB52',
+            '🔺 新品 (New)': '#EF553B'   # 鲜红色代表新品
+        },
+        symbol_map={
+            '🔥 动态产品 (高爆发)': 'circle',
+            '🧊 稳定产品 (基本盘)': 'circle',
+            '🔺 新品 (New)': 'triangle-up' # 新品使用三角形，更醒目
+        },
+        title=f"基于 {id_col} 的产品生命周期矩阵 (含新品监控)",
+        labels={'趋势得分': '销售趋势得分 (稳健回归斜率)', '销售中位数': '近12个月销售中位数'},
+        template="plotly_white",
+        height=600
+    )
+
+    # 添加十字参考线
+    fig_matrix.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+    fig_matrix.add_hline(y=y_baseline, line_dash="dash", line_color="black", opacity=0.3)
+
+    st.plotly_chart(fig_matrix, use_container_width=True)
+    
+    st.write(f"💡 **分析提示**：红色三角形代表您指定的新品。")
+else:
+    st.error(f"数据中未找到 '{id_col}' 字段，请检查原始表格。")
 
