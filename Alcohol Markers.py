@@ -381,7 +381,9 @@ if id_col in biz_df.columns:
     asin_stats = recent_12m_df.groupby(id_col).agg({
         '销量': 'median',
         '支数': 'first',
-        '笔头类型': 'first'
+        '笔头类型': 'first',
+        '单只价格': 'mean' # <--- 必须加上这一行，否则后面绘图 hover_data 找不到这一列
+}).rename(columns={'销量': '销售中位数'}).reset_index()
     }).rename(columns={'销量': '销售中位数'}).reset_index()
 
     asin_trends = recent_12m_df.groupby(id_col).apply(calculate_robust_trend).reset_index()
@@ -410,7 +412,7 @@ if id_col in biz_df.columns:
         symbol='产品状态', # 为新品增加形状区分（可选）
         size='销售中位数',
         hover_name=id_col,
-        hover_data=['支数', '笔头类型'],
+        hover_data=['支数', '笔头类型', '单只价格'],
         # --- 【修改】配色方案，增加新品的红色 ---
         color_discrete_map={
             '🔥 动态产品 (高爆发)': '#636EFA', 
