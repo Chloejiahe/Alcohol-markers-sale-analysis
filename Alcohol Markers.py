@@ -256,7 +256,7 @@ strat_df['增长贡献率'] = (strat_df['销量'] - strat_df['去年销量']) / 
 
 plot_df = strat_df[
     (strat_df['销量'] > 100) & 
-    (strat_df['同比增长率'] < 10)
+    (strat_df['同比增长率'] < 200)
 ].copy()
 
 # 5. 绘图 (增强颜色对比度版)
