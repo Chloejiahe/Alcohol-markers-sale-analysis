@@ -346,7 +346,6 @@ else:
 st.markdown("---")
 st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
 
-# 【确保定义了 id_col】
 id_col = 'ASIN' 
 
 new_asin_list = [
@@ -356,6 +355,7 @@ new_asin_list = [
     "B0F91WRVHF", "B0FL78FF2F", "B0FKMB9LVM", "B0FKGPNWMN", "B0FKN1JBXR"]
 
 if id_col in biz_df.columns:
+    # 1. 基础数据准备
     matrix_base = biz_df.copy()
     matrix_base['month_dt'] = pd.to_datetime(
         matrix_base['month(month)'].astype(str).str.strip(), 
@@ -364,34 +364,35 @@ if id_col in biz_df.columns:
     )
     matrix_base = matrix_base.dropna(subset=['month_dt'])
     
-    # 2. 计算每个 ASIN 近 12 个月的平均销售情况
+    # 2. 计算平均值
     latest_m = matrix_base['month_dt'].max()
     recent_12m_df = matrix_base[matrix_base['month_dt'] > (latest_m - pd.DateOffset(months=12))]
     
     asin_stats = recent_12m_df.groupby(id_col).agg({
         '销售额': 'mean', 
-        '支数': 'first',
         '单只价格': 'mean'
     }).rename(columns={'销售额': '均月销售额'}).reset_index()
 
-    # 3. 稳健回归计算趋势得分 (修正：使用原始 '销售额' 列算趋势)
+    # 3. 稳健回归计算趋势
     def calculate_robust_trend(group):
         if len(group) < 3: return 0.0
         group = group.sort_values('month_dt')
-        # 【修正点】趋势应该基于月度原始销售额的变化，而不是平均值
-        y = group['销售额'].values 
+        y = group['销售额'].values
         x = np.arange(len(y))
         x = sm.add_constant(x)
         try:
             model = sm.RLM(y, x, M=sm.robust.norms.HuberT())
-            return model.fit().params[1]
+            res = model.fit()
+            return float(res.params[1]) # 强制转为普通 float
         except: return 0.0
 
     asin_trends = recent_12m_df.groupby(id_col).apply(calculate_robust_trend, include_groups=False).reset_index()
     asin_trends.columns = [id_col, '趋势得分']
     
-    # 合并统计数据与趋势得分
+    # 合并并清洗数据 (关键修复步)
     plot_matrix = pd.merge(asin_stats, asin_trends, on=id_col)
+    # 替换无穷大并删除 NaN
+    plot_matrix = plot_matrix.replace([np.inf, -np.inf], np.nan).dropna(subset=['趋势得分', '均月销售额'])
 
     # 4. 计算基准线
     mature_mask = ~plot_matrix[id_col].isin(new_asin_list)
@@ -404,38 +405,44 @@ if id_col in biz_df.columns:
         x_p75 = mature_df['趋势得分'].quantile(0.75)
     else:
         y_median = x_median = 0
-        x_p25, x_p75 = -10, 10
+        x_p25, x_p75 = -5, 5
 
-# 5. 分类逻辑
+    # 5. 分类逻辑 (确保 Label 与下面 Map 完全一致)
     def get_status(row):
         if str(row[id_col]) in new_asin_list:
-            return '🔺 新品'
+            return 'New'
         
-        # 判定：地位稳 (销售额 >= 中值) 且 趋势在 P25-P75 之间 (最接近中值的稳定区)
-        is_high_status = row['均月销售额'] >= y_median
-        is_trend_stable = (x_p25 <= row['趋势得分'] <= x_p75)
+        is_high = row['均月销售额'] >= y_median
+        is_stable = (x_p25 <= row['趋势得分'] <= x_p75)
         
-        if is_high_status and is_trend_stable:
-            return '🟡 稳定产品'
-        return '🔵 动态产品'
+        if is_high and is_stable:
+            return 'Stable'
+        return 'Dynamic'
 
     plot_matrix['产品状态'] = plot_matrix.apply(get_status, axis=1)
 
-    # 6. 绘图
+    # 6. 绘图 (使用更稳健的映射)
     fig_matrix = px.scatter(
-        plot_matrix, x='趋势得分', y='均月销售额',
-        color='产品状态', symbol='产品状态',
-        size='均月销售额', size_max=25, opacity=0.7,
-        hover_name=id_col, 
-        color_discrete_map={'🟡 稳定产品': '#FECB52', '🔵 动态产品': '#636EFA', '🔺 新品': '#EF553B'},
-        symbol_map={'🟡 稳定产品': 'circle', '🔵 动态产品': 'circle', '🔺 新品': 'triangle-up'},
-        template="plotly_white", height=700
+        plot_matrix, 
+        x='趋势得分', 
+        y='均月销售额',
+        color='产品状态',
+        symbol='产品状态',
+        size='均月销售额',
+        size_max=20,
+        opacity=0.7,
+        hover_name=id_col,
+        # 统一使用英文标签避免编码导致的映射失败
+        color_discrete_map={'Stable': '#FECB52', 'Dynamic': '#636EFA', 'New': '#EF553B'},
+        symbol_map={'Stable': 'circle', 'Dynamic': 'circle', 'New': 'triangle-up'},
+        template="plotly_white", 
+        height=600
     )
 
-    # 7. 参考线
-    fig_matrix.add_hline(y=y_median, line_dash="dash", line_color="#1F77B4", annotation_text="销售中值")
-    fig_matrix.add_vline(x=x_median, line_dash="solid", line_color="red", line_width=2, annotation_text="趋势中值")
-    fig_matrix.add_vline(x=x_p25, line_dash="dot", line_color="red", opacity=0.3, annotation_text="P25")
-    fig_matrix.add_vline(x=x_p75, line_dash="dot", line_color="red", opacity=0.3, annotation_text="P75")
+    # 7. 辅助线
+    fig_matrix.add_hline(y=y_median, line_dash="dash", line_color="blue", opacity=0.3)
+    fig_matrix.add_vline(x=x_median, line_dash="solid", line_color="red", line_width=2)
+    fig_matrix.add_vline(x=x_p25, line_dash="dot", line_color="red", opacity=0.2)
+    fig_matrix.add_vline(x=x_p75, line_dash="dot", line_color="red", opacity=0.2)
 
     st.plotly_chart(fig_matrix, use_container_width=True)
