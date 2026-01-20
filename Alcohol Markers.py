@@ -300,7 +300,7 @@ if not biz_df.empty:
         '单只价格': 'mean' 
     }).reset_index()
 
-    triple_data = triple_data[triple_data['销量'] > 0]
+    triple_data = triple_data[triple_data['销量'] > 100]
 
     fig_triple = px.scatter(
         triple_data,
