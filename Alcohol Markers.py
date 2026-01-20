@@ -354,73 +354,74 @@ new_asin_list = [
     "B0FM83L163", "B0FH1JBW5T", "B0FDLC8MJ6", "B0FP2YV4ZZ", "B0FPDZ7VYM",
     "B0F91WRVHF", "B0FL78FF2F", "B0FKMB9LVM", "B0FKGPNWMN", "B0FKN1JBXR"]
 
-
-# 假设你的季度列名是 '季度'，如果不是请修改此处
-quarter_col = '季度' 
+quarter_col = '季度'  
 
 if id_col in filtered_df.columns and quarter_col in filtered_df.columns:
     
-    # 1. 提取最近的 4 个季度列表
+    # 1. 获取最近 4 个季度列表
     recent_4_quarters = sorted(filtered_df[quarter_col].unique())[-4:]
-    
-    # 2. 过滤数据：仅保留最近4季度的数据进行矩阵分析
     matrix_base_df = filtered_df[filtered_df[quarter_col].isin(recent_4_quarters)].copy()
     
     asin_stats = []
     
-    # 按 ASIN 分组计算
+    # 第一步：遍历计算每个 ASIN 的基础统计值
     for asin, group in matrix_base_df.groupby(id_col):
-        # 计算 Y 轴：4个季度的平均销量
+        # Y 轴：平均销量
         avg_sales = group.groupby(quarter_col)['销量'].sum().mean()
         
-        # 计算 X 轴：销售趋势 (对季度销量进行线性回归)
-        # 先按季度顺序排列销量
-        q_sales = group.groupby(quarter_col)['销量'].sum().sort_index().values
+        # X 轴：趋势计算
+        q_sales_series = group.groupby(quarter_col)['销量'].sum().sort_index()
+        q_sales = q_sales_series.values
         
         if len(q_sales) > 1:
-            # 只有 1 个季度无法计算趋势，至少需要 2 个点
             x = np.arange(len(q_sales))
             x_with_const = sm.add_constant(x)
             try:
-                # 使用稳健回归过滤波动
+                # 稳健回归获取斜率
                 model = sm.RLM(q_sales, x_with_const).fit()
-                trend_score = model.params[1] # 斜率即为趋势得分
+                trend_score = model.params[1]
             except:
                 trend_score = 0
         else:
             trend_score = 0
             
-        # 判定产品类型 (根据你的 new_asin_list)
-        if asin in new_asin_list:
-            p_type = '新品 (90天)'
-        elif trend_score > 0:
-            p_type = '动态产品'
-        else:
-            p_type = '稳定产品'
-            
         asin_stats.append({
             'ASIN': asin,
             '销售趋势得分': trend_score,
-            '近4季度平均销售额': avg_sales,
-            '产品类型': p_type
+            '近4季度平均销售额': avg_sales
         })
 
     if asin_stats:
         plot_df = pd.DataFrame(asin_stats)
         
-        # 计算参考线数值
-        y_median = plot_df['近4季度平均销售额'].median()
-        x_median = plot_df['销售趋势得分'].median()
+        # --- 第二步：核心逻辑修改 - 定义分类边界 ---
         x_p25 = plot_df['销售趋势得分'].quantile(0.25)
         x_p75 = plot_df['销售趋势得分'].quantile(0.75)
+        x_median = plot_df['销售趋势得分'].median()
+        y_median = plot_df['近4季度平均销售额'].median()
 
-        # 3. 绘图
+        # 定义分类函数
+        def classify_asin(row):
+            if row['ASIN'] in new_asin_list:
+                return '新品 (90天)'
+            # 落在 P25 和 P75 之间的被视为“稳定”，即跟随大盘正常波动
+            if x_p25 <= row['销售趋势得分'] <= x_p75:
+                return '稳定产品'
+            else:
+                # 超出正常波动区间的（无论极快增长还是极快下滑）均为“动态”
+                return '动态产品'
+
+        plot_df['产品类型'] = plot_df.apply(classify_asin, axis=1)
+
+        # --- 第三步：绘图 ---
         fig_matrix = go.Figure()
 
+        # 颜色与原图保持一致：稳定为黄，动态为深紫/蓝，新品为红
         color_map = {'动态产品': '#8c8cb4', '稳定产品': '#f2c977', '新品 (90天)': '#d65a5a'}
         symbol_map = {'动态产品': 'circle', '稳定产品': 'circle', '新品 (90天)': 'triangle-up'}
 
-        for t in ['动态产品', '稳定产品', '新品 (90天)']:
+        # 按照类型分层绘制
+        for t in ['稳定产品', '动态产品', '新品 (90天)']:
             curr_df = plot_df[plot_df['产品类型'] == t]
             if not curr_df.empty:
                 fig_matrix.add_trace(go.Scatter(
@@ -430,32 +431,34 @@ if id_col in filtered_df.columns and quarter_col in filtered_df.columns:
                     name=t,
                     marker=dict(color=color_map[t], symbol=symbol_map[t], size=10, opacity=0.8),
                     text=curr_df['ASIN'],
-                    hovertemplate="ASIN: %{text}<br>趋势得分: %{x:.2f}<br>平均销量: %{y:.0f}<extra></extra>"
+                    hovertemplate="ASIN: %{text}<br>趋势得分: %{x:.2f}<br>平均销量: %{y:.0f}<br>分类: "+t+"<extra></extra>"
                 ))
 
-        # 4. 添加参考线 (与原图对齐)
-        # 垂直中心线及区间线
-        fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5)
-        fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8, opacity=0.5)
-        fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8, opacity=0.5)
-        # 水平中位数线
-        fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5)
+        # 4. 视觉辅助：添加稳定区间背景带
+        fig_matrix.add_vrect(
+            x0=x_p25, x1=x_p75, 
+            fillcolor="rgba(128, 128, 128, 0.1)", 
+            layer="below", line_width=0,
+            annotation_text="稳定波动区 (P25-P75)", annotation_position="top left"
+        )
 
-        # 5. 标注数值
-        fig_matrix.add_annotation(x=x_median, y=plot_df['近4季度平均销售额'].max(), text=f"中位数: {x_median:.2f}", showarrow=False, yshift=10)
-        fig_matrix.add_annotation(x=plot_df['销售趋势得分'].max(), y=y_median, text=f"中位数: {y_median:.0f}", showarrow=False, xshift=40, font_color="#4a90e2")
+        # 5. 添加参考线
+        fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5)
+        fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8)
+        fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8)
+        fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5)
 
         fig_matrix.update_layout(
             template="plotly_white",
             title=f"产品矩阵分析 ({'、'.join(recent_4_quarters)})",
-            xaxis_title="销售趋势得分 (基于季度回归)",
-            yaxis_title="近4季度平均销售额",
+            xaxis_title="销售趋势得分 (季度增长斜率)",
+            yaxis_title="近4季度平均销量",
             height=700,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
 
         st.plotly_chart(fig_matrix, use_container_width=True)
     else:
-        st.warning("未找到符合筛选条件的 ASIN 数据。")
+        st.warning("数据不足，无法生成矩阵。")
 
 
