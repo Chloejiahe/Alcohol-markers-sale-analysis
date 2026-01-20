@@ -359,7 +359,16 @@ id_col = 'ASIN' if 'ASIN' in biz_df.columns else '商品编码'
 
 if id_col in biz_df.columns:
     matrix_base = biz_df.copy()
-    matrix_base['month_dt'] = pd.to_datetime(matrix_base['month(month)'])
+    
+    # --- 【修改 1】彻底修复日期报错 ---
+    # 针对文本模式的 202401，必须指定 format='%Y%m'
+    matrix_base['month_dt'] = pd.to_datetime(
+        matrix_base['month(month)'].astype(str).str.strip(), 
+        format='%Y%m', 
+        errors='coerce'
+    )
+    # 剔除无效日期行，防止计算崩溃
+    matrix_base = matrix_base.dropna(subset=['month_dt'])
     
     # 2. 定义稳健回归函数
     def calculate_robust_trend(group):
