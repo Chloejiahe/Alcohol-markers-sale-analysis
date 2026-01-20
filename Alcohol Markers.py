@@ -343,12 +343,11 @@ else:
 
 
 # --- 5. 产品矩阵分析：基于 ASIN (唯一商品) 维度 ---
-# --- 【新增】定义新品列表 ---
 st.markdown("---")
 st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
 
-# 【重要：确保定义了 id_col】
-id_col = 'ASIN'
+# 【确保定义了 id_col】
+id_col = 'ASIN' 
 
 new_asin_list = [
     "B0FCS8ZWQB", "B0FKLR5YCB", "B0FCS6M53X", "B0FGHQCR1C", "B0FL2FVWRS",
@@ -356,7 +355,6 @@ new_asin_list = [
     "B0FM83L163", "B0FH1JBW5T", "B0FDLC8MJ6", "B0FP2YV4ZZ", "B0FPDZ7VYM",
     "B0F91WRVHF", "B0FL78FF2F", "B0FKMB9LVM", "B0FKGPNWMN", "B0FKN1JBXR"]
 
-# 1. 基础数据准备
 if id_col in biz_df.columns:
     matrix_base = biz_df.copy()
     matrix_base['month_dt'] = pd.to_datetime(
@@ -366,7 +364,7 @@ if id_col in biz_df.columns:
     )
     matrix_base = matrix_base.dropna(subset=['month_dt'])
     
-    # 2. 计算每个 ASIN 近 4 季度平均月销售额
+    # 2. 计算每个 ASIN 近 12 个月的平均销售情况
     latest_m = matrix_base['month_dt'].max()
     recent_12m_df = matrix_base[matrix_base['month_dt'] > (latest_m - pd.DateOffset(months=12))]
     
@@ -376,11 +374,12 @@ if id_col in biz_df.columns:
         '单只价格': 'mean'
     }).rename(columns={'销售额': '均月销售额'}).reset_index()
 
-    # 3. 稳健回归计算趋势得分
+    # 3. 稳健回归计算趋势得分 (修正：使用原始 '销售额' 列算趋势)
     def calculate_robust_trend(group):
         if len(group) < 3: return 0.0
         group = group.sort_values('month_dt')
-        y = group['均月销售额'].values
+        # 【修正点】趋势应该基于月度原始销售额的变化，而不是平均值
+        y = group['销售额'].values 
         x = np.arange(len(y))
         x = sm.add_constant(x)
         try:
@@ -390,41 +389,34 @@ if id_col in biz_df.columns:
 
     asin_trends = recent_12m_df.groupby(id_col).apply(calculate_robust_trend, include_groups=False).reset_index()
     asin_trends.columns = [id_col, '趋势得分']
+    
+    # 合并统计数据与趋势得分
     plot_matrix = pd.merge(asin_stats, asin_trends, on=id_col)
 
-    # 4. 【核心步骤】计算成熟产品的各项基准线
+    # 4. 计算基准线
     mature_mask = ~plot_matrix[id_col].isin(new_asin_list)
     mature_df = plot_matrix[mature_mask]
     
     if not mature_df.empty:
-        # Y 轴：销售额中位数 (及格线)
         y_median = mature_df['均月销售额'].median()
-        # X 轴：增长趋势中位数 (脊梁线)
         x_median = mature_df['趋势得分'].median() 
-        # X 轴：增长趋势稳定性区间 (P25 & P75)
         x_p25 = mature_df['趋势得分'].quantile(0.25)
         x_p75 = mature_df['趋势得分'].quantile(0.75)
     else:
         y_median = x_median = 0
         x_p25, x_p75 = -10, 10
 
-    # 5. 分类逻辑：基于中值的稳定性判定
+# 5. 分类逻辑
     def get_status(row):
-        # A. 判定新品 (红色三角)
         if str(row[id_col]) in new_asin_list:
             return '🔺 新品'
         
-        # B. 判定稳定产品 (黄色原点)
-        # 逻辑：销售额 > 中值 (地位稳) 且 趋势得分接近中值/接近0 (趋势平)
-        # 这里为了给“接近”一个范围，通常取中值附近的微小偏差，或者根据业务需要定义
+        # 判定：地位稳 (销售额 >= 中值) 且 趋势在 P25-P75 之间 (最接近中值的稳定区)
         is_high_status = row['均月销售额'] >= y_median
-        # 我们定义“平稳”为处于趋势的 P25 到 P75 之间（这是最科学的“中值附近”定义）
         is_trend_stable = (x_p25 <= row['趋势得分'] <= x_p75)
         
         if is_high_status and is_trend_stable:
             return '🟡 稳定产品'
-        
-        # C. 判定动态产品 (深色圆点)
         return '🔵 动态产品'
 
     plot_matrix['产品状态'] = plot_matrix.apply(get_status, axis=1)
@@ -434,27 +426,16 @@ if id_col in biz_df.columns:
         plot_matrix, x='趋势得分', y='均月销售额',
         color='产品状态', symbol='产品状态',
         size='均月销售额', size_max=25, opacity=0.7,
-        hover_name=id_col, hover_data=['均月销售额', '趋势得分'],
+        hover_name=id_col, 
         color_discrete_map={'🟡 稳定产品': '#FECB52', '🔵 动态产品': '#636EFA', '🔺 新品': '#EF553B'},
         symbol_map={'🟡 稳定产品': 'circle', '🔵 动态产品': 'circle', '🔺 新品': 'triangle-up'},
         template="plotly_white", height=700
     )
 
-    # --- 7. 绘制那四条关键参考线 ---
-    
-    # 线1：销售额中位数 (蓝色虚线)
-    fig_matrix.add_hline(y=y_median, line_dash="dash", line_color="#1F77B4", 
-                         annotation_text=f" 销售中值: {y_median:,.0f}")
-    
-    # 线2：增长趋势中位数 (红色实线)
-    fig_matrix.add_vline(x=x_median, line_dash="solid", line_color="red", line_width=2,
-                         annotation_text=f" 趋势中值: {x_median:.2f}")
-    
-    # 线3 & 线4：增长趋势 P25 和 P75 (红色细点线)
-    fig_matrix.add_vline(x=x_p25, line_dash="dot", line_color="red", opacity=0.4,
-                         annotation_text=" P25", annotation_position="bottom left")
-    fig_matrix.add_vline(x=x_p75, line_dash="dot", line_color="red", opacity=0.4,
-                         annotation_text=" P75", annotation_position="bottom right")
+    # 7. 参考线
+    fig_matrix.add_hline(y=y_median, line_dash="dash", line_color="#1F77B4", annotation_text="销售中值")
+    fig_matrix.add_vline(x=x_median, line_dash="solid", line_color="red", line_width=2, annotation_text="趋势中值")
+    fig_matrix.add_vline(x=x_p25, line_dash="dot", line_color="red", opacity=0.3, annotation_text="P25")
+    fig_matrix.add_vline(x=x_p75, line_dash="dot", line_color="red", opacity=0.3, annotation_text="P75")
 
     st.plotly_chart(fig_matrix, use_container_width=True)
-    st.info(f"💡 **解读**：黄色代表销售额超中值且增长趋势在 P25-P75 稳定区间的核心产品。")
