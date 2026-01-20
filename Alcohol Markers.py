@@ -347,6 +347,9 @@ else:
 st.markdown("---")
 st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
 
+# 【重要：确保定义了 id_col】
+id_col = 'ASIN'
+
 new_asin_list = [
     "B0FCS8ZWQB", "B0FKLR5YCB", "B0FCS6M53X", "B0FGHQCR1C", "B0FL2FVWRS",
     "B0FL2KGB6Q", "B0FD34KW2Z", "B0FMYFW6Q9", "B0FNW7NYZ5", "B0FM3Q1R6V",
