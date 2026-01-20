@@ -354,95 +354,108 @@ new_asin_list = [
     "B0FM83L163", "B0FH1JBW5T", "B0FDLC8MJ6", "B0FP2YV4ZZ", "B0FPDZ7VYM",
     "B0F91WRVHF", "B0FL78FF2F", "B0FKMB9LVM", "B0FKGPNWMN", "B0FKN1JBXR"]
 
-if id_col in biz_df.columns:
-    # 1. 基础数据准备
-    matrix_base = biz_df.copy()
-    matrix_base['month_dt'] = pd.to_datetime(
-        matrix_base['month(month)'].astype(str).str.strip(), 
-        format='%Y%m', 
-        errors='coerce'
-    )
-    matrix_base = matrix_base.dropna(subset=['month_dt'])
-    
-    # 2. 计算平均值
-    latest_m = matrix_base['month_dt'].max()
-    recent_12m_df = matrix_base[matrix_base['month_dt'] > (latest_m - pd.DateOffset(months=12))]
-    
-    asin_stats = recent_12m_df.groupby(id_col).agg({
-        '销售额': 'mean', 
-        '单只价格': 'mean'
-    }).rename(columns={'销售额': '均月销售额'}).reset_index()
 
-    # 3. 稳健回归计算趋势
-    def calculate_robust_trend(group):
-        if len(group) < 3: return 0.0
-        group = group.sort_values('month_dt')
-        y = group['销售额'].values
-        x = np.arange(len(y))
-        x = sm.add_constant(x)
-        try:
-            model = sm.RLM(y, x, M=sm.robust.norms.HuberT())
-            res = model.fit()
-            return float(res.params[1]) # 强制转为普通 float
-        except: return 0.0
+# 假设你的季度列名是 '季度'，如果不是请修改此处
+quarter_col = '季度' 
 
-    asin_trends = recent_12m_df.groupby(id_col).apply(calculate_robust_trend, include_groups=False).reset_index()
-    asin_trends.columns = [id_col, '趋势得分']
+if id_col in filtered_df.columns and quarter_col in filtered_df.columns:
     
-    # 合并并清洗数据 (关键修复步)
-    plot_matrix = pd.merge(asin_stats, asin_trends, on=id_col)
-    # 替换无穷大并删除 NaN
-    plot_matrix = plot_matrix.replace([np.inf, -np.inf], np.nan).dropna(subset=['趋势得分', '均月销售额'])
+    # 1. 提取最近的 4 个季度列表
+    recent_4_quarters = sorted(filtered_df[quarter_col].unique())[-4:]
+    
+    # 2. 过滤数据：仅保留最近4季度的数据进行矩阵分析
+    matrix_base_df = filtered_df[filtered_df[quarter_col].isin(recent_4_quarters)].copy()
+    
+    asin_stats = []
+    
+    # 按 ASIN 分组计算
+    for asin, group in matrix_base_df.groupby(id_col):
+        # 计算 Y 轴：4个季度的平均销量
+        avg_sales = group.groupby(quarter_col)['销量'].sum().mean()
+        
+        # 计算 X 轴：销售趋势 (对季度销量进行线性回归)
+        # 先按季度顺序排列销量
+        q_sales = group.groupby(quarter_col)['销量'].sum().sort_index().values
+        
+        if len(q_sales) > 1:
+            # 只有 1 个季度无法计算趋势，至少需要 2 个点
+            x = np.arange(len(q_sales))
+            x_with_const = sm.add_constant(x)
+            try:
+                # 使用稳健回归过滤波动
+                model = sm.RLM(q_sales, x_with_const).fit()
+                trend_score = model.params[1] # 斜率即为趋势得分
+            except:
+                trend_score = 0
+        else:
+            trend_score = 0
+            
+        # 判定产品类型 (根据你的 new_asin_list)
+        if asin in new_asin_list:
+            p_type = '新品 (90天)'
+        elif trend_score > 0:
+            p_type = '动态产品'
+        else:
+            p_type = '稳定产品'
+            
+        asin_stats.append({
+            'ASIN': asin,
+            '销售趋势得分': trend_score,
+            '近4季度平均销售额': avg_sales,
+            '产品类型': p_type
+        })
 
-    # 4. 计算基准线
-    mature_mask = ~plot_matrix[id_col].isin(new_asin_list)
-    mature_df = plot_matrix[mature_mask]
-    
-    if not mature_df.empty:
-        y_median = mature_df['均月销售额'].median()
-        x_median = mature_df['趋势得分'].median() 
-        x_p25 = mature_df['趋势得分'].quantile(0.25)
-        x_p75 = mature_df['趋势得分'].quantile(0.75)
+    if asin_stats:
+        plot_df = pd.DataFrame(asin_stats)
+        
+        # 计算参考线数值
+        y_median = plot_df['近4季度平均销售额'].median()
+        x_median = plot_df['销售趋势得分'].median()
+        x_p25 = plot_df['销售趋势得分'].quantile(0.25)
+        x_p75 = plot_df['销售趋势得分'].quantile(0.75)
+
+        # 3. 绘图
+        fig_matrix = go.Figure()
+
+        color_map = {'动态产品': '#8c8cb4', '稳定产品': '#f2c977', '新品 (90天)': '#d65a5a'}
+        symbol_map = {'动态产品': 'circle', '稳定产品': 'circle', '新品 (90天)': 'triangle-up'}
+
+        for t in ['动态产品', '稳定产品', '新品 (90天)']:
+            curr_df = plot_df[plot_df['产品类型'] == t]
+            if not curr_df.empty:
+                fig_matrix.add_trace(go.Scatter(
+                    x=curr_df['销售趋势得分'],
+                    y=curr_df['近4季度平均销售额'],
+                    mode='markers',
+                    name=t,
+                    marker=dict(color=color_map[t], symbol=symbol_map[t], size=10, opacity=0.8),
+                    text=curr_df['ASIN'],
+                    hovertemplate="ASIN: %{text}<br>趋势得分: %{x:.2f}<br>平均销量: %{y:.0f}<extra></extra>"
+                ))
+
+        # 4. 添加参考线 (与原图对齐)
+        # 垂直中心线及区间线
+        fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5)
+        fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8, opacity=0.5)
+        fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8, opacity=0.5)
+        # 水平中位数线
+        fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5)
+
+        # 5. 标注数值
+        fig_matrix.add_annotation(x=x_median, y=plot_df['近4季度平均销售额'].max(), text=f"中位数: {x_median:.2f}", showarrow=False, yshift=10)
+        fig_matrix.add_annotation(x=plot_df['销售趋势得分'].max(), y=y_median, text=f"中位数: {y_median:.0f}", showarrow=False, xshift=40, font_color="#4a90e2")
+
+        fig_matrix.update_layout(
+            template="plotly_white",
+            title=f"产品矩阵分析 ({'、'.join(recent_4_quarters)})",
+            xaxis_title="销售趋势得分 (基于季度回归)",
+            yaxis_title="近4季度平均销售额",
+            height=700,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+
+        st.plotly_chart(fig_matrix, use_container_width=True)
     else:
-        y_median = x_median = 0
-        x_p25, x_p75 = -5, 5
+        st.warning("未找到符合筛选条件的 ASIN 数据。")
 
-    # 5. 分类逻辑 (确保 Label 与下面 Map 完全一致)
-    def get_status(row):
-        if str(row[id_col]) in new_asin_list:
-            return 'New'
-        
-        is_high = row['均月销售额'] >= y_median
-        is_stable = (x_p25 <= row['趋势得分'] <= x_p75)
-        
-        if is_high and is_stable:
-            return 'Stable'
-        return 'Dynamic'
 
-    plot_matrix['产品状态'] = plot_matrix.apply(get_status, axis=1)
-
-    # 6. 绘图 (使用更稳健的映射)
-    fig_matrix = px.scatter(
-        plot_matrix, 
-        x='趋势得分', 
-        y='均月销售额',
-        color='产品状态',
-        symbol='产品状态',
-        size='均月销售额',
-        size_max=20,
-        opacity=0.7,
-        hover_name=id_col,
-        # 统一使用英文标签避免编码导致的映射失败
-        color_discrete_map={'Stable': '#FECB52', 'Dynamic': '#636EFA', 'New': '#EF553B'},
-        symbol_map={'Stable': 'circle', 'Dynamic': 'circle', 'New': 'triangle-up'},
-        template="plotly_white", 
-        height=600
-    )
-
-    # 7. 辅助线
-    fig_matrix.add_hline(y=y_median, line_dash="dash", line_color="blue", opacity=0.3)
-    fig_matrix.add_vline(x=x_median, line_dash="solid", line_color="red", line_width=2)
-    fig_matrix.add_vline(x=x_p25, line_dash="dot", line_color="red", opacity=0.2)
-    fig_matrix.add_vline(x=x_p75, line_dash="dot", line_color="red", opacity=0.2)
-
-    st.plotly_chart(fig_matrix, use_container_width=True)
