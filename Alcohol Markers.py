@@ -343,108 +343,111 @@ else:
 
 
 # --- 5. 产品矩阵分析：基于 ASIN (唯一商品) 维度 ---
+# --- 【新增】定义新品列表 ---
 st.markdown("---")
 st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
 
-# --- 【新增】定义新品列表 ---
 new_asin_list = [
     "B0FCS8ZWQB", "B0FKLR5YCB", "B0FCS6M53X", "B0FGHQCR1C", "B0FL2FVWRS",
     "B0FL2KGB6Q", "B0FD34KW2Z", "B0FMYFW6Q9", "B0FNW7NYZ5", "B0FM3Q1R6V",
     "B0FM83L163", "B0FH1JBW5T", "B0FDLC8MJ6", "B0FP2YV4ZZ", "B0FPDZ7VYM",
     "B0F91WRVHF", "B0FL78FF2F", "B0FKMB9LVM", "B0FKGPNWMN", "B0FKN1JBXR"
-]
 
-# 1. 基础数据准备
-id_col = 'ASIN' if 'ASIN' in biz_df.columns else '商品编码' 
-
+# 1. 基础数据准备与日期修复
 if id_col in biz_df.columns:
     matrix_base = biz_df.copy()
-    
-    # --- 【修改 1】彻底修复日期报错 ---
-    # 针对文本模式的 202401，必须指定 format='%Y%m'
+    # 修复 202401 文本日期
     matrix_base['month_dt'] = pd.to_datetime(
         matrix_base['month(month)'].astype(str).str.strip(), 
         format='%Y%m', 
         errors='coerce'
     )
-    # 剔除无效日期行，防止计算崩溃
     matrix_base = matrix_base.dropna(subset=['month_dt'])
     
-    # 2. 定义稳健回归函数
+    # 2. 计算每个 ASIN 近 4 季度（12个月）的平均销售额
+    latest_m = matrix_base['month_dt'].max()
+    recent_12m_df = matrix_base[matrix_base['month_dt'] > (latest_m - pd.DateOffset(months=12))]
+    
+    asin_stats = recent_12m_df.groupby(id_col).agg({
+        '销售额': 'mean', 
+        '支数': 'first',
+        '单只价格': 'mean'
+    }).rename(columns={'销售额': '均月销售额'}).reset_index()
+
+    # 3. 稳健回归计算趋势得分 (X轴)
     def calculate_robust_trend(group):
         if len(group) < 3: return 0.0
-        y = group.sort_values('month_dt')['销量'].values
+        group = group.sort_values('month_dt')
+        y = group['均月销售额'].values
         x = np.arange(len(y))
         x = sm.add_constant(x)
         try:
             model = sm.RLM(y, x, M=sm.robust.norms.HuberT())
-            results = model.fit()
-            return results.params[1]
-        except:
-            return 0.0
+            return model.fit().params[1]
+        except: return 0.0
 
-    # 3. 计算指标
-    latest_m = matrix_base['month_dt'].max()
-    recent_12m_df = matrix_base[matrix_base['month_dt'] > (latest_m - pd.DateOffset(months=12))]
-
-    asin_stats = recent_12m_df.groupby(id_col).agg({
-        '销量': 'median',
-        '支数': 'first',
-        '笔头类型': 'first',
-        '单只价格': 'mean' # <--- 必须加上这一行，否则后面绘图 hover_data 找不到这一列
-    }).rename(columns={'销量': '销售中位数'}).reset_index()
-
-    asin_trends = recent_12m_df.groupby(id_col).apply(calculate_robust_trend).reset_index()
+    asin_trends = recent_12m_df.groupby(id_col).apply(calculate_robust_trend, include_groups=False).reset_index()
     asin_trends.columns = [id_col, '趋势得分']
-
-    # 4. 合并并打标签
     plot_matrix = pd.merge(asin_stats, asin_trends, on=id_col)
-    y_baseline = plot_matrix['销售中位数'].median()
+
+    # 4. 【核心步骤】定义成熟产品并计算 Y 轴基准
+    # 逻辑：不在新品列表里的就是成熟产品
+    mature_mask = ~plot_matrix[id_col].isin(new_asin_list)
+    mature_df = plot_matrix[mature_mask]
     
-    # --- 【修改】标签判定逻辑：优先判定是否为新品 ---
+    # Y轴基准线：成熟产品平均销售额的中位数
+    y_baseline = mature_df['均月销售额'].median() if not mature_df.empty else 0
+    # X轴基准线：0 (代表增长平稳的分界线)
+    x_baseline = 0.0
+
+    # 5. 分类逻辑 (对应黄色原点 vs 深色圆点)
     def get_status(row):
-        if row[id_col] in new_asin_list:
-            return '🔺 新品 (New)'
-        if row['趋势得分'] > 0 and row['销售中位数'] > y_baseline:
-            return '🔥 动态产品 (高爆发)'
-        return '🧊 稳定产品 (基本盘)'
+        # 判定 A：新品
+        if str(row[id_col]) in new_asin_list:
+            return '🔺 新品'
+        
+        # 判定 B：成熟产品逻辑
+        # 黄色原点：销售额 > 中位数 (市场地位稳) 且 趋势得分接近 0 (趋势平稳)
+        # 我们这里定义趋势得分在 P25 和 P75 之间为“平稳”，对齐截图
+        x_p25 = mature_df['趋势得分'].quantile(0.25) if not mature_df.empty else -10
+        x_p75 = mature_df['趋势得分'].quantile(0.75) if not mature_df.empty else 10
+        
+        if row['均月销售额'] > y_baseline:
+            if x_p25 <= row['趋势得分'] <= x_p75:
+                return '🟡 稳定产品 (地位稳/趋势平)'
+            else:
+                return '🔵 动态产品 (成熟但趋势不稳定)'
+        
+        # 其余归为动态产品 (低销售额区域)
+        return '🔵 动态产品 (低销售额/长尾)'
 
     plot_matrix['产品状态'] = plot_matrix.apply(get_status, axis=1)
 
-    # 5. 绘图
+    # 6. 绘图 (还原截图配色与参考线)
     fig_matrix = px.scatter(
-        plot_matrix,
-        x='趋势得分',
-        y='销售中位数',
-        color='产品状态',
-        symbol='产品状态', # 为新品增加形状区分（可选）
-        size='销售中位数',
-        hover_name=id_col,
-        hover_data=['支数', '笔头类型', '单只价格'],
-        # --- 【修改】配色方案，增加新品的红色 ---
+        plot_matrix, x='趋势得分', y='均月销售额',
+        color='产品状态', symbol='产品状态',
+        size='均月销售额', size_max=25, opacity=0.7,
+        hover_name=id_col, hover_data=['单只价格', '趋势得分'],
         color_discrete_map={
-            '🔥 动态产品 (高爆发)': '#636EFA', 
-            '🧊 稳定产品 (基本盘)': '#FECB52',
-            '🔺 新品 (New)': '#EF553B'   # 鲜红色代表新品
+            '🟡 稳定产品 (地位稳/趋势平)': '#FECB52', # 截图黄色
+            '🔵 动态产品 (成熟但趋势不稳定)': '#636EFA', # 截图深色
+            '🔵 动态产品 (低销售额/长尾)': '#636EFA',
+            '🔺 新品': '#EF553B' 
         },
         symbol_map={
-            '🔥 动态产品 (高爆发)': 'circle',
-            '🧊 稳定产品 (基本盘)': 'circle',
-            '🔺 新品 (New)': 'triangle-up' # 新品使用三角形，更醒目
+            '🟡 稳定产品 (地位稳/趋势平)': 'circle',
+            '🔵 动态产品 (成熟但趋势不稳定)': 'circle',
+            '🔵 动态产品 (低销售额/长尾)': 'circle',
+            '🔺 新品': 'triangle-up'
         },
-        title=f"基于 {id_col} 的产品生命周期矩阵 (含新品监控)",
-        labels={'趋势得分': '销售趋势得分 (稳健回归斜率)', '销售中位数': '近12个月销售中位数'},
-        template="plotly_white",
-        height=600
+        template="plotly_white", height=700
     )
 
-    # 添加十字参考线
-    fig_matrix.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
-    fig_matrix.add_hline(y=y_baseline, line_dash="dash", line_color="black", opacity=0.3)
+    # 添加辅助线
+    fig_matrix.add_hline(y=y_baseline, line_dash="dash", line_color="#1F77B4", 
+                         annotation_text=f"成熟产品销售中位数: {y_baseline:,.0f}")
+    fig_matrix.add_vline(x=x_baseline, line_dash="solid", line_color="red", line_width=2)
 
     st.plotly_chart(fig_matrix, use_container_width=True)
-    
-    st.write(f"💡 **分析提示**：红色三角形代表您指定的新品。")
-else:
-    st.error(f"数据中未找到 '{id_col}' 字段，请检查原始表格。")
 
