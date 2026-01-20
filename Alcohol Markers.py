@@ -383,7 +383,6 @@ if id_col in biz_df.columns:
         '支数': 'first',
         '笔头类型': 'first',
         '单只价格': 'mean' # <--- 必须加上这一行，否则后面绘图 hover_data 找不到这一列
-}).rename(columns={'销量': '销售中位数'}).reset_index()
     }).rename(columns={'销量': '销售中位数'}).reset_index()
 
     asin_trends = recent_12m_df.groupby(id_col).apply(calculate_robust_trend).reset_index()
