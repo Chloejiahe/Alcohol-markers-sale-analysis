@@ -254,9 +254,14 @@ strat_df['市场份额'] = strat_df['销量'] / strat_df['销量'].sum()
 total_delta = strat_df['销量'].sum() - strat_df['去年销量'].sum()
 strat_df['增长贡献率'] = (strat_df['销量'] - strat_df['去年销量']) / (total_delta if total_delta != 0 else 1)
 
+plot_df = strat_df[
+    (strat_df['销量'] > 100) & 
+    (strat_df['同比增长率'] < 10)
+].copy()
+
 # 5. 绘图 (增强颜色对比度版)
 fig_strat = px.scatter(
-    strat_df[strat_df['销量'] > 30], 
+    plot_df, 
     x='市场份额',
     y='同比增长率',
     size='销量',
