@@ -400,6 +400,7 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
         x_p25 = plot_df['销售趋势得分'].quantile(0.25)
         x_p75 = plot_df['销售趋势得分'].quantile(0.75)
         x_median = plot_df['销售趋势得分'].median()
+        x_mean = plot_df['销售趋势得分'].mean()
         y_median = plot_df['月均销量'].median()
         y_mean = plot_df['月均销量'].mean() # 【新增】计算月均销量的平均值
 
