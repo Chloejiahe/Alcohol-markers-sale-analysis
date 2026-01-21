@@ -474,6 +474,7 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
             xaxis_title="销售趋势得分 (月度增长斜率)",
             yaxis_title="月度平均销量",
             height=700,
+            margin=dict(r=120, t=80), # 增加右边距和顶边距放标签
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
 
