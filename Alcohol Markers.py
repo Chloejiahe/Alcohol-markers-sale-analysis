@@ -357,14 +357,18 @@ new_asin_list = [
     "B0FM83L163", "B0FH1JBW5T", "B0FDLC8MJ6", "B0FP2YV4ZZ", "B0FPDZ7VYM",
     "B0F91WRVHF", "B0FL78FF2F", "B0FKMB9LVM", "B0FKGPNWMN", "B0FKN1JBXR"]
 
-if id_col in filtered_df.columns and month_col in filtered_df.columns:
+if id_col in df.columns and month_col in df.columns:
+    all_available_months = sorted(df[month_col].unique()) 
+    recent_12_months = all_available_months[-12:]
     
-    # 1. 获取最近 12 个月列表 (对应过去一年)
-    recent_12_months = sorted(filtered_df[month_col].unique())[-12:]
-    matrix_base_df = filtered_df[filtered_df[month_col].isin(recent_12_months)].copy()
+    # 1. 重新基于原始 df 提取矩阵基础表，确保时间轴不受侧边栏年份勾选干扰
+    matrix_base_df = df[df[month_col].isin(recent_12_months)].copy()
+    # 2. “是否8+”的侧边栏筛选依然对矩阵有效：
+    if selected_age != "全部":
+        matrix_base_df = matrix_base_df[matrix_base_df['是否8+'] == selected_age]
+    
     
     asin_stats = []
-    
     # 第一步：遍历计算每个 ASIN 的基础统计值
     for asin, group in matrix_base_df.groupby(id_col):
         # Y 轴：月平均销量
