@@ -223,7 +223,7 @@ st.markdown("---")
 
 # --- 1. 战略机会识别：规格 x 笔尖 蓝海气泡图 ---
 st.markdown("---")
-st.header("🚀 战略定位：细分蓝海机会识别 (月均效能对比)")
+st.header("🚀 战略定位：细分蓝海机会识别")
 
 # 提取年份
 df['year_int'] = df['month(month)'].astype(str).str[:4].astype(int)
@@ -344,7 +344,7 @@ else:
 
 # --- 5. 产品矩阵分析：基于 ASIN (唯一商品) 维度 ---
 st.markdown("---")
-st.header("🎯 ASIN 矩阵：爆款潜力挖掘 (月度趋势版)")
+st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
 
 id_col = 'ASIN' 
 # 使用你定义的月份列名，根据之前代码应该是 '时间轴' 或 'month(month)'
@@ -417,7 +417,7 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
         fig_matrix = go.Figure()
 
         color_map = {'动态产品': '#8c8cb4', '稳定产品': '#f2c977', '新品 (90天)': '#d65a5a'}
-        symbol_map = {'动态产品': 'circle', '稳定产品': 'circle', '新品 (90天)': 'triangle-up'}
+        symbol_map = {'动态产品': 'circle', '稳定产品': 'square', '新品 (90天)': 'triangle-up'}
 
         for t in ['稳定产品', '动态产品', '新品 (90天)']:
             curr_df = plot_df[plot_df['产品类型'] == t]
@@ -440,14 +440,33 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
             annotation_text="稳定波动区 (P25-P75)", annotation_position="top left"
         )
 
+        # 垂直线 (X轴趋势)
         fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5)
         fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8)
         fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8)
         
         # 水平参考线（Y轴）
         fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5) # 蓝色实线：中位数
-        # 【新增】蓝色虚线：平均值
         fig_matrix.add_hline(y=y_mean, line_color="#4a90e2", line_dash="dash", line_width=1.2, opacity=0.7)
+
+        # 5. 具体数值标注
+        
+        # X轴数值标注
+        y_max = plot_df['月均销量'].max()
+        annotations = [
+            dict(x=x_p25, y=y_max, text=f"P25: {x_p25:.2f}", showarrow=False, yshift=20, font=dict(color="red", size=10)),
+            dict(x=x_median, y=y_max, text=f"中位数: {x_median:.2f}", showarrow=False, yshift=35, font=dict(color="red", size=11, bold=True)),
+            dict(x=x_p75, y=y_max, text=f"P75: {x_p75:.2f}", showarrow=False, yshift=20, font=dict(color="red", size=10)),
+        ]
+
+        # Y轴数值标注
+        x_max = plot_df['销售趋势得分'].max()
+        annotations.extend([
+            dict(x=x_max, y=y_median, text=f" 中位数: {y_median:,.0f}", xanchor="left", showarrow=False, 
+                 bgcolor="black", font=dict(color="white", size=10)),
+            dict(x=x_max, y=y_mean, text=f" 平均值: {y_mean:,.0f}", xanchor="left", showarrow=False, 
+                 bgcolor="#4a90e2", font=dict(color="white", size=10), yshift=15 if abs(y_mean-y_median)<(y_max*0.05) else 0)
+        ])
         
         fig_matrix.update_layout(
             template="plotly_white",
