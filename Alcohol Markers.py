@@ -122,7 +122,7 @@ st.plotly_chart(fig_tip_share, use_container_width=True)
 
 
 # 3. 细分对比：局部联动走势
-st.subheader("🔍 细分笔头销量趋势对比")
+st.subheader("🔍 细分笔头销量走势对比")
 
 # 局部按钮 (多选模式)
 all_tips = sorted(filtered_df['笔头类型'].unique().tolist())
@@ -137,7 +137,7 @@ if selected_tips:
         y='销量', 
         color='笔头类型', 
         markers=True, 
-        title=f"选定笔头的月度实物销量走势"
+        title=f"选定笔头的月度销量走势"
     )
     fig_tip.update_layout(hovermode="x unified", template="plotly_white")
     st.plotly_chart(fig_tip, use_container_width=True)
@@ -209,7 +209,6 @@ else:
 st.markdown("---")
 
 # --- 板块三：价格段 ---
-# --- 板块三：价格段 ---
 st.header("3️⃣ 价格段深度分析")
 
 # 1. 整体分布：静态切片
@@ -257,7 +256,7 @@ fig_price_share.update_layout(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
 st.plotly_chart(fig_price_share, use_container_width=True)
-st.info("💡 **趋势洞察**：如果高价格带（如红色/紫色区域）的面积在扩大，说明市场正在向品质化、高客单价转型。")
+
 
 # 3. 细分走势：局部联动
 st.subheader("🔍 细分价格段销量走势对比")
@@ -283,6 +282,8 @@ if selected_prices:
     st.plotly_chart(fig_price_line, use_container_width=True)
 else:
     st.info("请在上方选择价格段以对比走势。")
+
+st.markdown("---")
     
 # --- 板块四：单只价格精细分析 (最新业务逻辑) ---
 st.header("4️⃣ 单只定价区间分析")
@@ -361,17 +362,41 @@ with tab_trend:
     )
     st.plotly_chart(fig_biz_share, use_container_width=True)
 
-    # --- 原有：销量走势（折线图） ---
-    st.subheader("⏳ 各区间月度实物销量走势")
-    biz_trend_data = biz_df.groupby(['时间轴', '单只价格区间'], observed=False)['销量'].sum().reset_index()
-    fig_biz_trend = px.line(
-        biz_trend_data, x='时间轴', y='销量', 
-        color='单只价格区间', markers=True,
-        category_orders={"单只价格区间": biz_price_order},
-        title="不同单只定价带的绝对销量波动"
+# --- 2. 【核心修改】细分单价销量走势对比：改为按键操作模式 ---
+    st.subheader("🔍 细分单价销量走势对比")
+
+    # 获取所有可选的定价区间标签
+    all_biz_intervals = sorted(biz_df['单只价格区间'].unique().tolist())
+    
+    # 添加按键操作 (st.pills)
+    # 默认选中前三个区间，或者你可以根据业务需求调整 default
+    selected_intervals = st.pills(
+        "选择定价区间查看走势 (支持多选)：", 
+        all_biz_intervals, 
+        selection_mode="multi", 
+        default=all_biz_intervals[:3]
     )
-    fig_biz_trend.update_layout(hovermode="x unified", template="plotly_white")
-    st.plotly_chart(fig_biz_trend, use_container_width=True)
+
+    if selected_intervals:
+        # 根据按键选择过滤数据
+        d_biz_trend = biz_df[biz_df['单只价格区间'].isin(selected_intervals)]
+        
+        # 聚合过滤后的数据
+        biz_trend_plot_data = d_biz_trend.groupby(['时间轴', '单只价格区间'], observed=False)['销量'].sum().reset_index()
+        
+        fig_biz_trend = px.line(
+            biz_trend_plot_data, 
+            x='时间轴', 
+            y='销量', 
+            color='单只价格区间', 
+            markers=True,
+            category_orders={"单只价格区间": biz_price_order},
+            title="选定单只定价带的月度实物销量走势"
+        )
+        fig_biz_trend.update_layout(hovermode="x unified", template="plotly_white")
+        st.plotly_chart(fig_biz_trend, use_container_width=True)
+    else:
+        st.info("请在上方选择定价区间以查看具体销量走势。")
 
 st.markdown("---")
 
