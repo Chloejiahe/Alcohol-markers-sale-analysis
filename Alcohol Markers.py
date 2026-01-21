@@ -432,30 +432,33 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
                     hovertemplate="ASIN: %{text}<br>月度趋势得分: %{x:.2f}<br>月均销量: %{y:.0f}<br>分类: "+t+"<extra></extra>"
                 ))
 
-        # --- 第四步：视觉辅助线 + 自动数值标注 (最简写法) ---
-        # 1. 垂直线与标注 (X轴)
-        fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5, 
-                             annotation_text=f"<b>中位数: {x_median:.2f}</b>", annotation_position="top")
-        fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8, 
+        # --- 第四步：视觉辅助线与数值标注 (精简版) ---
+        # 1. 垂直线 (X轴)：直接带标注，自动解决 P25 显示问题
+        fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8,
                              annotation_text=f"P25: {x_p25:.2f}", annotation_position="top left")
-        fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8, 
-                             annotation_text=f"P75: {x_p75:.2f}", annotation_position="top right")
         
-        # 2. 水平线与标注 (Y轴)
-        fig_matrix.add_hline(y=y_median, line_color="black", line_width=1.5, 
-                             annotation_text=f"中位数: {y_median:,.0f}", annotation_position="right")
-        fig_matrix.add_hline(y=y_mean, line_color="#4a90e2", line_dash="dash", line_width=1.2, 
-                             annotation_text=f"平均值: {y_mean:,.0f}", annotation_position="bottom right")
+        fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5,
+                             annotation_text=f"<b>中位数: {x_median:.2f}</b>", annotation_position="top")
+        
+        fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8,
+                             annotation_text=f"P75: {x_p75:.2f}", annotation_position="top right")
 
-        # 3. 布局优化
+        # 2. 水平线 (Y轴)
+        fig_matrix.add_hline(y=y_median, line_color="black", line_width=1.5,
+                             annotation_text=f"销量中位数: {y_median:,.0f}", annotation_position="right")
+        
+        fig_matrix.add_hline(y=y_mean, line_color="#4a90e2", line_dash="dash", line_width=1.2,
+                             annotation_text=f"销量平均值: {y_mean:,.0f}", annotation_position="bottom right")
+
+        # 3. 布局设置
         fig_matrix.update_layout(
             template="plotly_white",
             title=f"产品矩阵分析 (基于最近 {len(recent_12_months)} 个月数据)",
             xaxis_title="销售趋势得分 (月度增长斜率)",
             yaxis_title="月度平均销量",
             height=700,
-            margin=dict(r=100, t=100), # 留出足够边距防止文字溢出
-            # 自动调整X轴范围，确保左侧 P25 标注不被切掉
+            margin=dict(r=120, t=100), # 留出空间给标注
+            # 自动调整 X 轴范围，给左侧 P25 留出 20% 的显示空间
             xaxis=dict(range=[plot_df['销售趋势得分'].min()*1.2, plot_df['销售趋势得分'].max()*1.2]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
