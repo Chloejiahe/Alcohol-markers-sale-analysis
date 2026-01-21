@@ -459,9 +459,24 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
         # X轴数值标注 (顶部红色)
         # 注意：Plotly font 不接受 bold 参数，改用 HTML 标签 <b>
         x_annos = [
-            {'x': x_p25, 'y': y_max, 'text': f"P25: {x_p25:.2f}", 'color': "red", 'yshift': 20},
-            {'x': x_median, 'y': y_max, 'text': f"<b>中位数: {x_median:.2f}</b>", 'color': "red", 'yshift': 35},
-            {'x': x_p75, 'y': y_max, 'text': f"P75: {x_p75:.2f}", 'color': "red", 'yshift': 20},
+            {
+                'x': x_p25, 
+                'text': f"P25: {x_p25:.2f}", 
+                'yshift': 15,        # 较低位置
+                'xanchor': 'right'   # 锚点在右，文字会向红线左侧展开，防止挤占中位数
+            },
+            {
+                'x': x_median, 
+                'text': f"<b>中位数: {x_median:.2f}</b>", 
+                'yshift': 45,        # 最高位置
+                'xanchor': 'center'  # 居中显示
+            },
+            {
+                'x': x_p75, 
+                'text': f"P75: {x_p75:.2f}", 
+                'yshift': 15,        # 较低位置
+                'xanchor': 'left'    # 锚点在左，文字会向红线右侧展开
+            },
         ]
 
         for anno in x_annos:
