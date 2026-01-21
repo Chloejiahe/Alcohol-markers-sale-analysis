@@ -75,21 +75,71 @@ else:
 # --- 板块一：笔尖类型 ---
 st.header("1️⃣ 笔尖类型：销量趋势分析")
 
-# 图表 1：整体分布 (不受局部按钮影响)
+# 1. 整体分布：静态切片
 st.subheader("📊 笔尖整体销量构成")
 tip_pie = px.pie(filtered_df, values='销量', names='笔头类型', hole=0.4)
+# 优化：显示百分比和标签
+tip_pie.update_traces(textposition='inside', textinfo='percent+label')
 st.plotly_chart(tip_pie, use_container_width=True)
+
+# 2. 【新增】市场份额演变：动态结构分析
+st.subheader("📈 笔头类型市场份额推移")
+
+# 聚合数据：按月和笔头类型统计销量
+tip_share_data = filtered_df.groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index()
+
+# 计算每月总销量，用于计算占比（归一化）
+monthly_total = tip_share_data.groupby('时间轴')['销量'].transform('sum')
+tip_share_data['占比'] = tip_share_data['销量'] / monthly_total
+
+# 绘制堆积面积图
+fig_tip_share = go.Figure()
+tip_types = sorted(tip_share_data['笔头类型'].unique())
+
+for tip in tip_types:
+    sub_df = tip_share_data[tip_share_data['笔头类型'] == tip]
+    fig_tip_share.add_trace(go.Scatter(
+        x=sub_df['时间轴'], 
+        y=sub_df['占比'], 
+        name=tip,
+        stackgroup='one',  # 开启堆积模式
+        mode='lines',
+        fill='tonexty',
+        hovertemplate=f"笔头: {tip}<br>份额: %{{y:.1%}}<extra></extra>"
+    ))
+
+fig_tip_share.update_layout(
+    xaxis_title="时间轴",
+    yaxis_title="市场份额占比",
+    yaxis_tickformat='.0%',  # 纵坐标显示百分比
+    hovermode="x unified",    # 悬浮时显示该时间点所有数据
+    height=450,
+    template="plotly_white",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+)
+st.plotly_chart(fig_tip_share, use_container_width=True)
+
+
+
+# 3. 细分对比：局部联动走势
+st.subheader("🔍 细分笔头销量趋势对比")
 
 # 局部按钮 (多选模式)
 all_tips = sorted(filtered_df['笔头类型'].unique().tolist())
-selected_tips = st.pills("细分笔头查看 (支持多选)：", all_tips, selection_mode="multi", default=all_tips[:3])
+selected_tips = st.pills("选择笔头进行具体走势对比 (支持多选)：", all_tips, selection_mode="multi", default=all_tips[:3])
 
-# 图表 2：局部联动走势
 if selected_tips:
     d_tip = filtered_df[filtered_df['笔头类型'].isin(selected_tips)]
     tip_trend = d_tip.groupby(['时间轴', '笔头类型'])['销量'].sum().reset_index()
-    fig_tip = px.line(tip_trend, x='时间轴', y='销量', color='笔头类型', markers=True, 
-                      title=f"选定笔头的月度走势")
+    fig_tip = px.line(
+        tip_trend, 
+        x='时间轴', 
+        y='销量', 
+        color='笔头类型', 
+        markers=True, 
+        title=f"选定笔头的月度实物销量走势"
+    )
+    fig_tip.update_layout(hovermode="x unified", template="plotly_white")
     st.plotly_chart(fig_tip, use_container_width=True)
 else:
     st.info("请在上方选择笔头类型以查看走势。")
@@ -159,33 +209,97 @@ else:
 st.markdown("---")
 
 # --- 板块三：价格段 ---
+# --- 板块三：价格段 ---
 st.header("3️⃣ 价格段深度分析")
 
-# 图表 1：价格构成 (全局锁定)
+# 1. 整体分布：静态切片
 st.subheader("📊 整体市场价格构成")
 fig_pie_price = px.pie(filtered_df, values='销量', names='价格段', hole=0.4)
+fig_pie_price.update_traces(textposition='inside', textinfo='percent+label')
 st.plotly_chart(fig_pie_price, use_container_width=True)
+
+# 2. 【新增】价格段市场份额推移：动态结构分析
+st.subheader("📈 价格段市场份额演变")
+
+# 聚合数据：按月和价格段统计销量
+price_share_data = filtered_df.groupby(['时间轴', '价格段'])['销量'].sum().reset_index()
+
+# 计算每月总销量，用于归一化百分比
+monthly_total_price = price_share_data.groupby('时间轴')['销量'].transform('sum')
+price_share_data['占比'] = price_share_data['销量'] / monthly_total_price
+
+# 为了绘图美观，对价格段进行排序（确保 0-4.99 在最下面，>=70 在最上面）
+price_order = ['0-4.99', '5-9.99', '10-14.99', '15-19.99', '20-24.99', '25-29.99', '30-34.99', '35-39.99', '40-69.99', '>=70']
+# 只保留数据中存在的价格段
+existing_prices = [p for p in price_order if p in price_share_data['价格段'].unique()]
+
+fig_price_share = go.Figure()
+
+for price_range in existing_prices:
+    sub_df = price_share_data[price_share_data['价格段'] == price_range]
+    fig_price_share.add_trace(go.Scatter(
+        x=sub_df['时间轴'], 
+        y=sub_df['占比'], 
+        name=price_range,
+        stackgroup='one', # 开启堆积
+        mode='lines',
+        fill='tonexty',
+        hovertemplate=f"价格段: {price_range}<br>份额: %{{y:.1%}}<extra></extra>"
+    ))
+
+fig_price_share.update_layout(
+    xaxis_title="时间轴",
+    yaxis_title="市场份额占比",
+    yaxis_tickformat='.0%',
+    hovermode="x unified",
+    height=500,
+    template="plotly_white",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+)
+st.plotly_chart(fig_price_share, use_container_width=True)
+st.info("💡 **趋势洞察**：如果高价格带（如红色/紫色区域）的面积在扩大，说明市场正在向品质化、高客单价转型。")
+
+# 3. 细分走势：局部联动
+st.subheader("🔍 细分价格段销量走势对比")
 
 # 局部按钮 (多选模式)
 all_prices = sorted(filtered_df['价格段'].unique().tolist())
-selected_prices = st.pills("筛选价格区间 (支持多选)：", all_prices, selection_mode="multi")
+selected_prices = st.pills("筛选价格区间查看走势 (支持多选)：", all_prices, selection_mode="multi")
 
 # 图表 2：细分走势
 if selected_prices:
     d_price = filtered_df[filtered_df['价格段'].isin(selected_prices)]
     price_trend = d_price.groupby(['时间轴', '价格段'])['销量'].sum().reset_index()
-    fig_price_bar = px.bar(price_trend, x='时间轴', y='销量', color='价格段', barmode='group', title="选定价格段月度对比")
-    st.plotly_chart(fig_price_bar, use_container_width=True)
+    # 这里将 px.bar 改为 px.line 更好观察趋势，或者保留 bar 也可以
+    fig_price_line = px.line(
+        price_trend, 
+        x='时间轴', 
+        y='销量', 
+        color='价格段', 
+        markers=True, 
+        title="选定价格段月度销量走势"
+    )
+    fig_price_line.update_layout(hovermode="x unified", template="plotly_white")
+    st.plotly_chart(fig_price_line, use_container_width=True)
 else:
     st.info("请在上方选择价格段以对比走势。")
-
+    
 # --- 板块四：单只价格精细分析 (最新业务逻辑) ---
 st.header("4️⃣ 单只定价区间分析")
 
-# 过滤异常数据：
-# 1. 剔除非数字内容（如 '--' 转换后变成的 NaN）
-# 2. 剔除单价小于等于 0 的数据
+# 1. 过滤异常数据与准备
 biz_df = filtered_df[filtered_df['单只价格'].notna() & (filtered_df['单只价格'] > 0)].copy()
+
+# 定义标签顺序，确保图表堆叠逻辑从低价到高价
+biz_price_order = [
+    '1. 超低价走量款 (≤0.25)', 
+    '2. 大众平价款 (0.25-0.5]', 
+    '3. 标准办公款 (0.5-1.0]', 
+    '4. 品质进阶款 (1.0-2.0]', 
+    '5. 中端功能款 (2.0-4.0]', 
+    '6. 中高端款 (4.0-6.0]', 
+    '7. 高端/奢侈款 (>6.0)'
+]
 
 tab_dist, tab_trend = st.tabs(["📊 销量占比分布", "📈 市场趋势推移"])
 
@@ -199,7 +313,8 @@ with tab_dist:
             x='单只价格区间', y='销量', 
             color='单只价格区间',
             text_auto='.2s',
-            title="哪个定价带最能出单？"
+            title="哪个定价带最能出单？",
+            category_orders={"单只价格区间": biz_price_order}
         )
         st.plotly_chart(price_dist_fig, use_container_width=True)
     
@@ -208,15 +323,54 @@ with tab_dist:
         # 饼图：展示各区间份额占比
         fig_pie_biz = px.pie(
             biz_df, values='销量', names='单只价格区间', 
-            hole=0.4, title="7级定价带销量占比"
+            hole=0.4, title="7级定价带销量占比",
+            category_orders={"单只价格区间": biz_price_order}
         )
+        fig_pie_biz.update_traces(textinfo='percent+label')
         st.plotly_chart(fig_pie_biz, use_container_width=True)
 
 with tab_trend:
-    st.subheader("⏳ 各单只定价月度销量走势")
-    # 观察低价走量款与品质款的市场热度切换
+    # --- 新增：单只定价份额演变（面积图） ---
+    st.subheader("📈 单只价格区间份额演变")
+    
+    # 计算份额数据
+    biz_share_data = biz_df.groupby(['时间轴', '单只价格区间'], observed=False)['销量'].sum().reset_index()
+    biz_monthly_total = biz_share_data.groupby('时间轴')['销量'].transform('sum')
+    biz_share_data['占比'] = biz_share_data['销量'] / biz_monthly_total
+
+    fig_biz_share = go.Figure()
+    # 按照业务逻辑顺序堆叠
+    existing_biz_labels = [l for l in biz_price_order if l in biz_share_data['单只价格区间'].unique()]
+    
+    for label in existing_biz_labels:
+        sub_df = biz_share_data[biz_share_data['单只价格区间'] == label]
+        fig_biz_share.add_trace(go.Scatter(
+            x=sub_df['时间轴'], y=sub_df['占比'], 
+            name=label,
+            stackgroup='one',
+            mode='lines',
+            fill='tonexty',
+            hovertemplate=f"区间: {label}<br>份额: %{{y:.1%}}<extra></extra>"
+        ))
+    
+    fig_biz_share.update_layout(
+        xaxis_title="时间轴", yaxis_title="市场份额",
+        yaxis_tickformat='.0%', hovermode="x unified",
+        height=450, template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_biz_share, use_container_width=True)
+
+    # --- 原有：销量走势（折线图） ---
+    st.subheader("⏳ 各区间月度实物销量走势")
     biz_trend_data = biz_df.groupby(['时间轴', '单只价格区间'], observed=False)['销量'].sum().reset_index()
-    fig_biz_trend = px.line(biz_trend_data, x='时间轴', y='销量', color='单只价格区间', markers=True)
+    fig_biz_trend = px.line(
+        biz_trend_data, x='时间轴', y='销量', 
+        color='单只价格区间', markers=True,
+        category_orders={"单只价格区间": biz_price_order},
+        title="不同单只定价带的绝对销量波动"
+    )
+    fig_biz_trend.update_layout(hovermode="x unified", template="plotly_white")
     st.plotly_chart(fig_biz_trend, use_container_width=True)
 
 st.markdown("---")
