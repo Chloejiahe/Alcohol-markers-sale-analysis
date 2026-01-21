@@ -401,6 +401,7 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
         x_p75 = plot_df['销售趋势得分'].quantile(0.75)
         x_median = plot_df['销售趋势得分'].median()
         y_median = plot_df['月均销量'].median()
+        y_mean = plot_df['月均销量'].mean() # 【新增】计算月均销量的平均值
 
         def classify_asin(row):
             if row['ASIN'] in new_asin_list:
@@ -442,8 +443,12 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
         fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5)
         fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8)
         fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8)
-        fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5)
-
+        
+        # 水平参考线（Y轴）
+        fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5) # 蓝色实线：中位数
+        # 【新增】蓝色虚线：平均值
+        fig_matrix.add_hline(y=y_mean, line_color="#4a90e2", line_dash="dash", line_width=1.2, opacity=0.7)
+        
         fig_matrix.update_layout(
             template="plotly_white",
             title=f"产品矩阵分析 (基于最近 {len(recent_12_months)} 个月数据)",
