@@ -444,14 +444,14 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
         fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8,
                              annotation_text=f"P75: {x_p75:.2f}", annotation_position="top right")
        
-        fig_matrix.add_vline(x=x_mean, line_dash="dot", line_color="red", line_width=1.2,
-                             annotation_text=f"趋势平均: {x_mean:.2f}", annotation_position="top left")
+        fig_matrix.add_vline(x=x_mean, line_dash="dot", line_color="black", line_width=1.2,
+                             annotation_text=f"趋势平均: {x_mean:.2f}", annotation_position="bottom left")
 
         # 2. 水平线 (Y轴)
-        fig_matrix.add_hline(y=y_median, line_color="black", line_width=1.5,
+        fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5,
                              annotation_text=f"销量中位数: {y_median:,.0f}", annotation_position="right")
         
-        fig_matrix.add_hline(y=y_mean, line_color="#4a90e2", line_dash="dash", line_width=1.2,
+        fig_matrix.add_hline(y=y_mean, line_color="black", line_dash="dash", line_width=1.2,
                              annotation_text=f"销量平均值: {y_mean:,.0f}", annotation_position="bottom right")
 
         # 3. 布局设置
