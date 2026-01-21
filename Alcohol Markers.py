@@ -469,6 +469,7 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
         ])
         
         fig_matrix.update_layout(
+            annotations=annotations,
             template="plotly_white",
             title=f"产品矩阵分析 (基于最近 {len(recent_12_months)} 个月数据)",
             xaxis_title="销售趋势得分 (月度增长斜率)",
