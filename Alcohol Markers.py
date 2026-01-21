@@ -462,7 +462,7 @@ if id_col in df.columns and month_col in df.columns:
         # 3. 布局设置
         fig_matrix.update_layout(
             template="plotly_white",
-            title=f"产品矩阵分析 (基于最近 {len(recent_12_months)} 个月数据)",
+            title=f"产品矩阵分析 (基于固定周期: 202412 - 202511)",
             xaxis_title="销售趋势得分 (月度增长斜率)",
             yaxis_title="月度平均销量",
             height=700,
