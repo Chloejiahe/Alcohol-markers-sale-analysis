@@ -347,8 +347,6 @@ st.markdown("---")
 st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
 
 id_col = 'ASIN' 
-# 使用你定义的月份列名，根据之前代码应该是 '时间轴' 或 'month(month)'
-# 这里建议使用 month(month) 因为它便于排序
 month_col = 'month(month)' 
 
 new_asin_list = [
@@ -358,15 +356,18 @@ new_asin_list = [
     "B0F91WRVHF", "B0FL78FF2F", "B0FKMB9LVM", "B0FKGPNWMN", "B0FKN1JBXR"]
 
 if id_col in df.columns and month_col in df.columns:
-    all_available_months = sorted(df[month_col].unique()) 
-    recent_12_months = all_available_months[-12:]
+    # 定义你指定的固定 12 个月区间
+    target_12_months = [
+        '202412', 
+        '202501', '202502', '202503', '202504', '202505', '202506', 
+        '202507', '202508', '202509', '202510', '202511'
+    ]
     
-    # 1. 重新基于原始 df 提取矩阵基础表，确保时间轴不受侧边栏年份勾选干扰
-    matrix_base_df = df[df[month_col].isin(recent_12_months)].copy()
-    # 2. “是否8+”的侧边栏筛选依然对矩阵有效：
+    matrix_base_df = df[df[month_col].isin(target_12_months)].copy()
+    
+    # 2. 依然同步侧边栏的“人群分类”筛选
     if selected_age != "全部":
         matrix_base_df = matrix_base_df[matrix_base_df['是否8+'] == selected_age]
-    
     
     asin_stats = []
     # 第一步：遍历计算每个 ASIN 的基础统计值
