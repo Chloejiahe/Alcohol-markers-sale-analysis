@@ -432,82 +432,32 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
                     hovertemplate="ASIN: %{text}<br>月度趋势得分: %{x:.2f}<br>月均销量: %{y:.0f}<br>分类: "+t+"<extra></extra>"
                 ))
 
-        # 4. 视觉辅助线与背景
-        fig_matrix.add_vrect(
-            x0=x_p25, x1=x_p75, 
-            fillcolor="rgba(128, 128, 128, 0.1)", 
-            layer="below", line_width=0,
-            annotation_text="稳定波动区 (P25-P75)", annotation_position="top left"
-        )
-
-        # 垂直线 (X轴趋势)
-        fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5)
-        fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8)
-        fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8)
+        # --- 第四步：视觉辅助线 + 自动数值标注 (最简写法) ---
+        # 1. 垂直线与标注 (X轴)
+        fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5, 
+                             annotation_text=f"<b>中位数: {x_median:.2f}</b>", annotation_position="top")
+        fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8, 
+                             annotation_text=f"P25: {x_p25:.2f}", annotation_position="top left")
+        fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8, 
+                             annotation_text=f"P75: {x_p75:.2f}", annotation_position="top right")
         
-        # 水平参考线（Y轴）
-        fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5) # 蓝色实线：中位数
-        fig_matrix.add_hline(y=y_mean, line_color="#4a90e2", line_dash="dash", line_width=1.2, opacity=0.7)
+        # 2. 水平线与标注 (Y轴)
+        fig_matrix.add_hline(y=y_median, line_color="black", line_width=1.5, 
+                             annotation_text=f"中位数: {y_median:,.0f}", annotation_position="right")
+        fig_matrix.add_hline(y=y_mean, line_color="#4a90e2", line_dash="dash", line_width=1.2, 
+                             annotation_text=f"平均值: {y_mean:,.0f}", annotation_position="bottom right")
 
-        # 5. 具体数值标注
-        y_max = plot_df['月均销量'].max() if not plot_df.empty else 0
-        x_max = plot_df['销售趋势得分'].max() if not plot_df.empty else 0
-        
-        # 准备标注列表
-        final_annotations = []
-
-        # X轴数值标注 (顶部红色)
-        # 注意：Plotly font 不接受 bold 参数，改用 HTML 标签 <b>
-        x_annos = [
-            {
-                'x': x_p25, 
-                'text': f"P25: {x_p25:.2f}", 
-                'yshift': 15,        # 较低位置
-                'xanchor': 'right'   # 锚点在右，文字会向红线左侧展开，防止挤占中位数
-            },
-            {
-                'x': x_median, 
-                'text': f"<b>中位数: {x_median:.2f}</b>", 
-                'yshift': 45,        # 最高位置
-                'xanchor': 'center'  # 居中显示
-            },
-            {
-                'x': x_p75, 
-                'text': f"P75: {x_p75:.2f}", 
-                'yshift': 15,        # 较低位置
-                'xanchor': 'left'    # 锚点在左，文字会向红线右侧展开
-            },
-        ]
-
-        for anno in x_annos:
-            final_annotations.append(dict(
-                x=anno['x'], y=anno['y'], text=anno['text'],
-                showarrow=False, yshift=anno['yshift'],
-                font=dict(color=anno['color'], size=11)
-            ))
-
-        # Y轴数值标注 (右侧黑/蓝底)
-        final_annotations.extend([
-            dict(x=x_max, y=y_median, text=f" 中位数: {y_median:,.0f} ", 
-                 xanchor="left", showarrow=False, bgcolor="black", 
-                 font=dict(color="white", size=10)),
-            dict(x=x_max, y=y_mean, text=f" 平均值: {y_mean:,.0f} ", 
-                 xanchor="left", showarrow=False, bgcolor="#4a90e2", 
-                 font=dict(color="white", size=10),
-                 yshift=15 if abs(y_mean - y_median) < (y_max * 0.05) else 0)
-        ])
-        
+        # 3. 布局优化
         fig_matrix.update_layout(
-            annotations=final_annotations,
             template="plotly_white",
             title=f"产品矩阵分析 (基于最近 {len(recent_12_months)} 个月数据)",
             xaxis_title="销售趋势得分 (月度增长斜率)",
             yaxis_title="月度平均销量",
             height=700,
-            margin=dict(r=120, t=80), # 增加右边距和顶边距放标签
+            margin=dict(r=100, t=100), # 留出足够边距防止文字溢出
+            # 自动调整X轴范围，确保左侧 P25 标注不被切掉
+            xaxis=dict(range=[plot_df['销售趋势得分'].min()*1.2, plot_df['销售趋势得分'].max()*1.2]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
 
         st.plotly_chart(fig_matrix, use_container_width=True)
-    else:
-        st.warning("数据不足，无法生成矩阵。")
