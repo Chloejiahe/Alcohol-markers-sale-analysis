@@ -450,26 +450,40 @@ if id_col in filtered_df.columns and month_col in filtered_df.columns:
         fig_matrix.add_hline(y=y_mean, line_color="#4a90e2", line_dash="dash", line_width=1.2, opacity=0.7)
 
         # 5. 具体数值标注
+        y_max = plot_df['月均销量'].max() if not plot_df.empty else 0
+        x_max = plot_df['销售趋势得分'].max() if not plot_df.empty else 0
         
-        # X轴数值标注
-        y_max = plot_df['月均销量'].max()
-        annotations = [
-            dict(x=x_p25, y=y_max, text=f"P25: {x_p25:.2f}", showarrow=False, yshift=20, font=dict(color="red", size=10)),
-            dict(x=x_median, y=y_max, text=f"中位数: {x_median:.2f}", showarrow=False, yshift=35, font=dict(color="red", size=11, bold=True)),
-            dict(x=x_p75, y=y_max, text=f"P75: {x_p75:.2f}", showarrow=False, yshift=20, font=dict(color="red", size=10)),
+        # 准备标注列表
+        final_annotations = []
+
+        # X轴数值标注 (顶部红色)
+        # 注意：Plotly font 不接受 bold 参数，改用 HTML 标签 <b>
+        x_annos = [
+            {'x': x_p25, 'y': y_max, 'text': f"P25: {x_p25:.2f}", 'color': "red", 'yshift': 20},
+            {'x': x_median, 'y': y_max, 'text': f"<b>中位数: {x_median:.2f}</b>", 'color': "red", 'yshift': 35},
+            {'x': x_p75, 'y': y_max, 'text': f"P75: {x_p75:.2f}", 'color': "red", 'yshift': 20},
         ]
 
-        # Y轴数值标注
-        x_max = plot_df['销售趋势得分'].max()
-        annotations.extend([
-            dict(x=x_max, y=y_median, text=f" 中位数: {y_median:,.0f}", xanchor="left", showarrow=False, 
-                 bgcolor="black", font=dict(color="white", size=10)),
-            dict(x=x_max, y=y_mean, text=f" 平均值: {y_mean:,.0f}", xanchor="left", showarrow=False, 
-                 bgcolor="#4a90e2", font=dict(color="white", size=10), yshift=15 if abs(y_mean-y_median)<(y_max*0.05) else 0)
+        for anno in x_annos:
+            final_annotations.append(dict(
+                x=anno['x'], y=anno['y'], text=anno['text'],
+                showarrow=False, yshift=anno['yshift'],
+                font=dict(color=anno['color'], size=11)
+            ))
+
+        # Y轴数值标注 (右侧黑/蓝底)
+        final_annotations.extend([
+            dict(x=x_max, y=y_median, text=f" 中位数: {y_median:,.0f} ", 
+                 xanchor="left", showarrow=False, bgcolor="black", 
+                 font=dict(color="white", size=10)),
+            dict(x=x_max, y=y_mean, text=f" 平均值: {y_mean:,.0f} ", 
+                 xanchor="left", showarrow=False, bgcolor="#4a90e2", 
+                 font=dict(color="white", size=10),
+                 yshift=15 if abs(y_mean - y_median) < (y_max * 0.05) else 0)
         ])
         
         fig_matrix.update_layout(
-            annotations=annotations,
+            annotations=final_annotations,
             template="plotly_white",
             title=f"产品矩阵分析 (基于最近 {len(recent_12_months)} 个月数据)",
             xaxis_title="销售趋势得分 (月度增长斜率)",
