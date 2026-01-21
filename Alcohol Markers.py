@@ -472,3 +472,77 @@ if id_col in df.columns and month_col in df.columns:
         )
 
         st.plotly_chart(fig_matrix, use_container_width=True)
+
+
+# --- 6. 核心结构演变：Top15 季度竞争格局状况 ---
+st.markdown("---")
+st.header("⚖️ 核心结构演变：Top15 季度竞争格局状况")
+
+# 定义你的 Top15 ASIN 列表
+top15_asins = [
+    "B07ZYFXLZ6", "B073TW8QHV", "B07NRB5G3Q", "B0BWH7CWFW", "B0BG7118BK",
+    "B01H1NV1RE", "B08P4J7X8T", "B0BW87BYSN", "B074TC3LSR", "B07VK1G863",
+    "B077S1NH7H", "B07RSV32MD", "B086JJVQPF", "B08YDDCBDZ", "B01GRF7NRY"
+]
+
+# 检查数据中是否存在“季度”列
+if '季度' in filtered_df.columns:
+    # 1. 标记是否为 Top15 产品
+    struct_df = filtered_df.copy()
+    struct_df['产品类型'] = struct_df['ASIN'].apply(lambda x: 'Top15头部' if x in top15_asins else '其他长尾产品')
+
+    # 2. 按季度聚合销量
+    # 注意：这里需要按季度排序，确保图表横轴逻辑正确
+    quarter_stats = struct_df.groupby(['季度', '产品类型'])['销量'].sum().reset_index()
+    
+    # 3. 计算每个季度的贡献占比
+    quarter_total = quarter_stats.groupby('季度')['销量'].transform('sum')
+    quarter_stats['贡献占比'] = quarter_stats['销量'] / quarter_total
+
+    # 4. 绘制季度结构演变堆积柱状图
+    fig_struct = px.bar(
+        quarter_stats, 
+        x='季度', 
+        y='销量', 
+        color='产品类型',
+        title="各季度市场结构演变 (Top15 vs 其他)",
+        color_discrete_map={'Top15头部': '#1f77b4', '其他长尾产品': '#e5ecf6'},
+        barmode='relative',
+        text_auto='.2s'
+    )
+    
+    # 5. 绘制贡献占比折线图（次坐标轴思想，通过两个图表并行展示）
+    # 提取 Top15 的占比趋势
+    top15_trend = quarter_stats[quarter_stats['产品类型'] == 'Top15头部'].sort_values('季度')
+    
+    fig_ratio = px.line(
+        top15_trend,
+        x='季度',
+        y='贡献占比',
+        markers=True,
+        title="Top15 市场销量贡献率走势 (%)",
+        text=top15_trend['贡献占比'].apply(lambda x: f"{x:.1%}")
+    )
+    fig_ratio.update_traces(textposition="top center", line_color='#d65a5a', line_width=3)
+    fig_ratio.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1])
+
+    # 布局展示
+    col_left, col_right = st.columns([3, 2])
+    with col_left:
+        st.plotly_chart(fig_struct, use_container_width=True)
+    with col_right:
+        st.plotly_chart(fig_ratio, use_container_width=True)
+
+    # 6. 自动诊断逻辑
+    latest_ratio = top15_trend['贡献占比'].iloc[-1] if not top15_trend.empty else 0
+    avg_ratio = top15_trend['贡献占比'].mean() if not top15_trend.empty else 0
+    
+    st.info(f"""
+    **🔍 季度结构诊断：**
+    - **当前份额**：最近一个季度 Top15 占据了市场 **{latest_ratio:.1%}** 的销量。
+    - **历史均值**：Top15 的平均贡献水平在 **{avg_ratio:.1%}**。
+    - **格局提示**：{'⚠️ 头部效应正在加强，市场进入壁垒极高。' if latest_ratio > avg_ratio else '✅ 头部份额有所松动，新进产品存在突围空间。'}
+    - **判断标准**：若 Top15 长期贡献 > 70%，说明增长严重依赖头部玩家，属于“存量收割”市场。
+    """)
+else:
+    st.error("数据集中未找到名为 '季度' 的列，请检查 Excel 表头。")
