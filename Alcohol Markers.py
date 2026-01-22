@@ -18,29 +18,27 @@ def load_data():
         df = pd.read_excel(file_path, engine='openpyxl')
         df.columns = [c.strip() for c in df.columns] 
         
-        # --- 【关键步骤】单只价格深度清洗与区间定义 ---
-        # 1. 强制转为数字，无法转换的变为 NaN
-        df['单只价格'] = pd.to_numeric(df['单只价格'], errors='coerce')
+        # --- 1. 强制转换月份为字符串并去除空格 (防止排序报错) ---
+        df['month(month)'] = df['month(month)'].astype(str).str.strip()
         
-        # 2. 物理剔除负数和 0 (这是你指出的核心步骤，确保分析纯净)
+        # --- 2. 只有统一为字符串后，排序才是绝对安全的 ---
+        df = df.sort_values('month(month)')
+
+        # --- 3. 单只价格深度清洗 ---
+        df['单只价格'] = pd.to_numeric(df['单只价格'], errors='coerce')
         df = df[df['单只价格'] > 0].copy() 
         
-        # 3. 按照您的 7 级业务逻辑划分区间
+        # 价格区间定义 (保持你原有的逻辑)
         bins = [0, 0.25, 0.5, 1.0, 2.0, 4.0, 6.0, float('inf')]
         labels = [
-            '1. 超低价走量款 (≤0.25)', 
-            '2. 大众平价款 (0.25-0.5]', 
-            '3. 标准办公款 (0.5-1.0]', 
-            '4. 品质进阶款 (1.0-2.0]', 
-            '5. 中端功能款 (2.0-4.0]', 
-            '6. 中高端款 (4.0-6.0]', 
+            '1. 超低价走量款 (≤0.25)', '2. 大众平价款 (0.25-0.5]', 
+            '3. 标准办公款 (0.5-1.0]', '4. 品质进阶款 (1.0-2.0]', 
+            '5. 中端功能款 (2.0-4.0]', '6. 中高端款 (4.0-6.0]', 
             '7. 高端/奢侈款 (>6.0)'
         ]
         df['单只价格区间'] = pd.cut(df['单只价格'], bins=bins, labels=labels)
-        # --------------------------------------------
 
-        df['month(month)'] = df['month(month)'].astype(str)
-        df = df.sort_values('month(month)')
+        # 时间轴与填充
         df['时间轴'] = df['month(month)'].apply(lambda x: f"{x[:4]}-{x[4:]}")
         df['是否8+'] = df['是否8+'].fillna('否')
         
