@@ -521,6 +521,12 @@ else:
 
 
 
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import statsmodels.api as sm
+import streamlit as st
+
 # --- 5. 产品矩阵分析：基于 ASIN (唯一商品) 维度 ---
 st.markdown("---")
 st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
@@ -528,41 +534,41 @@ st.header("🎯 ASIN 矩阵：爆款潜力挖掘")
 id_col = 'ASIN' 
 month_col = 'month(month)' 
 
+# 预定义的新品列表
 new_asin_list = [
     "B0FL78FF2F", "B0DP9BMKJR", "B0FB8LM5ZR", "B0FL2GLMPZ", "B0FDKM2Q3V",
     "B0DP9FDTT3", "B0F4X5NMCF", "B0F3JFHGCP", "B0FDG8XJPS", "B0FGHQCR1C",
     "B0FH4PYS7Q", "B0FH9MB9LD", "B0FJQM9LVB", "B0FJQXT63G"]
 
 if id_col in df.columns and month_col in df.columns:
-    # 定义你指定的固定 12 个月区间
+    # 1. 定义固定 12 个月区间
     target_12_months = [
-        '202412', 
-        '202501', '202502', '202503', '202504', '202505', '202506', 
-        '202507', '202508', '202509', '202510', '202511'
+        '202412', '202501', '202502', '202503', '202504', '202505', 
+        '202506', '202507', '202508', '202509', '202510', '202511'
     ]
     
-    matrix_base_df = df[df[month_col].isin(target_12_months)].copy()
+    matrix_base_df = df[df[month_col].astype(str).isin(target_12_months)].copy()
     
-    # 2. 依然同步侧边栏的“人群分类”筛选
-    if selected_age != "全部":
+    # 同步侧边栏人群筛选（假设 side bar 已定义 selected_age）
+    if 'selected_age' in locals() and selected_age != "全部":
         matrix_base_df = matrix_base_df[matrix_base_df['是否8+'] == selected_age]
     
     asin_stats = []
     # 第一步：遍历计算每个 ASIN 的基础统计值
     for asin, group in matrix_base_df.groupby(id_col):
-        # Y 轴：月平均销量
-        avg_sales = group.groupby(month_col)['销量'].sum().mean()
-        
-        # X 轴：月度趋势计算
+        # 核心指标：该 ASIN 在这 12 个月里实际出现了几个月？
         m_sales_series = group.groupby(month_col)['销量'].sum().sort_index()
-        m_sales = m_sales_series.values
+        active_months = len(m_sales_series)
         
-        if len(m_sales) > 1:
-            # 使用简单的 0, 1, 2... 作为时间轴进行回归
+        # Y 轴：月平均销量
+        avg_sales = m_sales_series.mean()
+        
+        # X 轴：月度趋势得分 (RLM 回归)
+        m_sales = m_sales_series.values
+        if active_months > 1:
             x = np.arange(len(m_sales))
             x_with_const = sm.add_constant(x)
             try:
-                # 稳健回归获取月度增长斜率
                 model = sm.RLM(m_sales, x_with_const).fit()
                 trend_score = model.params[1]
             except:
@@ -573,27 +579,33 @@ if id_col in df.columns and month_col in df.columns:
         asin_stats.append({
             'ASIN': asin,
             '销售趋势得分': trend_score,
-            '月均销量': avg_sales
+            '月均销量': avg_sales,
+            '活跃月份数': active_months  # 【新增】记录生存时长
         })
 
     if asin_stats:
         plot_df = pd.DataFrame(asin_stats)
         
-        # --- 第二步：分类边界定义 (基于月度得分的分位数) ---
+        # --- 第二步：分类边界定义 ---
         x_p25 = plot_df['销售趋势得分'].quantile(0.25)
         x_p75 = plot_df['销售趋势得分'].quantile(0.75)
         x_median = plot_df['销售趋势得分'].median()
         x_mean = plot_df['销售趋势得分'].mean()
         y_median = plot_df['月均销量'].median()
-        y_mean = plot_df['月均销量'].mean() # 【新增】计算月均销量的平均值
+        y_mean = plot_df['月均销量'].mean()
 
         def classify_asin(row):
+            # 优先判定为手动指定的新品
             if row['ASIN'] in new_asin_list:
                 return '新品 (90天)'
-            if x_p25 <= row['销售趋势得分'] <= x_p75:
-                return '稳定产品'
-            else:
-                return '动态产品'
+            
+            # 【优化点】：只有销售时长 >= 4 个月的产品，才有资格评选“稳定产品”
+            # 活跃月份太短的产品（即便得分平稳）统一划入“动态/待观察”
+            if row['活跃月份数'] >= 4:
+                if x_p25 <= row['销售趋势得分'] <= x_p75:
+                    return '稳定产品'
+            
+            return '动态产品'
 
         plot_df['产品类型'] = plot_df.apply(classify_asin, axis=1)
 
@@ -613,44 +625,41 @@ if id_col in df.columns and month_col in df.columns:
                     name=t,
                     marker=dict(color=color_map[t], symbol=symbol_map[t], size=10, opacity=0.8),
                     text=curr_df['ASIN'],
-                    hovertemplate="ASIN: %{text}<br>月度趋势得分: %{x:.2f}<br>月均销量: %{y:.0f}<br>分类: "+t+"<extra></extra>"
+                    customdata=curr_df['活跃月份数'], # 传入活跃月份
+                    hovertemplate=(
+                        "<b>ASIN: %{text}</b><br>" +
+                        "活跃月份数: %{customdata}月<br>" +
+                        "月度趋势得分: %{x:.2f}<br>" +
+                        "月均销量: %{y:.0f}<br>" +
+                        "分类: " + t + "<extra></extra>"
+                    )
                 ))
 
-        # --- 第四步：视觉辅助线与数值标注 (精简版) ---
-        # 1. 垂直线 (X轴)：直接带标注，自动解决 P25 显示问题
+        # --- 第四步：视觉辅助线 ---
         fig_matrix.add_vline(x=x_p25, line_dash="dash", line_color="red", line_width=0.8,
                              annotation_text=f"P25: {x_p25:.2f}", annotation_position="top left")
-        
         fig_matrix.add_vline(x=x_median, line_color="red", line_width=1.5,
                              annotation_text=f"<b>中位数: {x_median:.2f}</b>", annotation_position="top")
-        
         fig_matrix.add_vline(x=x_p75, line_dash="dash", line_color="red", line_width=0.8,
                              annotation_text=f"P75: {x_p75:.2f}", annotation_position="top right")
-       
-        fig_matrix.add_vline(x=x_mean, line_dash="dot", line_color="black", line_width=1.2,
-                             annotation_text=f"趋势平均: {x_mean:.2f}", annotation_position="bottom left")
-
-        # 2. 水平线 (Y轴)
         fig_matrix.add_hline(y=y_median, line_color="#4a90e2", line_width=1.5,
                              annotation_text=f"销量中位数: {y_median:,.0f}", annotation_position="right")
-        
-        fig_matrix.add_hline(y=y_mean, line_color="black", line_dash="dash", line_width=1.2,
-                             annotation_text=f"销量平均值: {y_mean:,.0f}", annotation_position="bottom right")
 
-        # 3. 布局设置
+        # 布局设置
         fig_matrix.update_layout(
             template="plotly_white",
-            title=f"产品矩阵分析 (基于固定周期: 202412 - 202511)",
+            title=f"产品矩阵分析 (固定周期: 202412 - 202511 | 稳定产品门槛: 活跃≥4个月)",
             xaxis_title="销售趋势得分 (月度增长斜率)",
             yaxis_title="月度平均销量",
             height=700,
-            margin=dict(r=120, t=100), # 留出空间给标注
-            # 自动调整 X 轴范围，给左侧 P25 留出 20% 的显示空间
-            xaxis=dict(range=[plot_df['销售趋势得分'].min()*1.2, plot_df['销售趋势得分'].max()*1.2]),
+            margin=dict(r=120, t=100),
+            xaxis=dict(range=[plot_df['销售趋势得分'].min()*1.2 - 1, plot_df['销售趋势得分'].max()*1.2 + 1]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
 
         st.plotly_chart(fig_matrix, use_container_width=True)
+else:
+    st.error("数据缺失 ASIN 或 月份列，请检查数据源。")
 
 
 # --- 6. 核心结构演变：Top15 季度竞争格局状况 ---
